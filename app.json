@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "owner": "nagalli-ambiental-inventario",
+    "name": "Nagalli Ambiental - Inventário Florestal",
+    "slug": "nagalli-inventario",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a6b3c"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nagalli.inventario"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a6b3c"
+      },
+      "package": "com.nagalli.inventario",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-location",
+      "expo-camera"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e5d3c420-9cc6-42f0-bd5f-73131ca1b53e"
+      }
+    }
+  }
+}

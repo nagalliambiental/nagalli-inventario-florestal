@@ -1,0 +1,159 @@
+import React, { useCallback, useState } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+} from "react-native";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useFocusEffect } from "@react-navigation/native";
+import { getProject, listPlots, deletePlot, getProjectSummary } from "../db/database";
+import { colors } from "../constants/colors";
+import { fmtDate, methodLabel, fmtM2, fmtM3 } from "../utils/formats";
+import type { Plot, ProjectSummary } from "../types";
+import type { RootStackParamList } from "../types/navigation";
+
+type Props = NativeStackScreenProps<RootStackParamList, "Project">;
+
+export function ProjectScreen({ route, navigation }: Props) {
+  const { projectId } = route.params;
+  const [project, setProject] = useState<any>(null);
+  const [plots, setPlots] = useState<Plot[]>([]);
+  const [summary, setSummary] = useState<ProjectSummary | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      getProject(projectId).then(setProject);
+      listPlots(projectId).then(setPlots);
+      getProjectSummary(projectId).then(setSummary);
+    }, [projectId])
+  );
+
+  const handleDeletePlot = (id: number, code: string) => {
+    Alert.alert("Excluir parcela", `Excluir "${code}"?`, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Excluir", style: "destructive", onPress: () => deletePlot(id).then(() => listPlots(projectId).then(setPlots)) },
+    ]);
+  };
+
+  if (!project) return null;
+
+  return (
+    <View style={styles.container}>
+      {summary && (
+        <View style={styles.summary}>
+          <View style={styles.statRow}>
+            <StatBox label="Parcelas" value={String(summary.plotCount)} />
+            <StatBox label="Árvores" value={String(summary.treeCount)} />
+            <StatBox label="Espécies" value={String(summary.speciesCount)} />
+          </View>
+          <View style={styles.statRow}>
+            <StatBox label="Área basal" value={fmtM2(summary.basalAreaTotal)} small />
+            <StatBox label="Volume" value={fmtM3(summary.volumeTotal)} small />
+          </View>
+        </View>
+      )}
+
+      <FlatList
+        data={plots}
+        keyExtractor={(i) => String(i.id)}
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={<Text style={styles.empty}>Nenhuma parcela cadastrada</Text>}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => navigation.navigate("Plot", { plotId: item.id })}
+            onLongPress={() => handleDeletePlot(item.id, item.code)}
+          >
+            <Text style={styles.cardTitle}>{item.code}</Text>
+            {item.areaM2 > 0 && <Text style={styles.meta}>{item.areaM2} m²</Text>}
+            <Text style={styles.date}>{fmtDate(item.createdAt)}</Text>
+          </TouchableOpacity>
+        )}
+      />
+
+      <View style={styles.bottomRow}>
+        <TouchableOpacity
+          style={styles.reportBtn}
+          onPress={() => navigation.navigate("Report", { projectId })}
+        >
+          <Text style={styles.reportText}>Relatórios</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => navigation.navigate("PlotForm", { projectId })}
+        >
+          <Text style={styles.fabText}>+ Parcela</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function StatBox({ label, value, small }: { label: string; value: string; small?: boolean }) {
+  return (
+    <View style={[styles.statBox, small && { flex: 1 }]}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  summary: { padding: 16, paddingBottom: 0 },
+  statRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  statBox: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    padding: 12,
+    alignItems: "center",
+    elevation: 1,
+  },
+  statValue: { fontSize: 20, fontWeight: "700", color: colors.primary },
+  statLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  list: { padding: 16, paddingBottom: 80 },
+  empty: { textAlign: "center", color: colors.textLight, marginTop: 40, fontSize: 15 },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.secondary,
+    elevation: 1,
+  },
+  cardTitle: { fontSize: 16, fontWeight: "600", color: colors.text },
+  meta: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+  date: { fontSize: 11, color: colors.textLight, marginTop: 4 },
+  bottomRow: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    padding: 16,
+    gap: 12,
+  },
+  reportBtn: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  reportText: { color: colors.primary, fontWeight: "600", fontSize: 15 },
+  fab: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    padding: 14,
+    alignItems: "center",
+  },
+  fabText: { color: colors.white, fontWeight: "700", fontSize: 15 },
+});
