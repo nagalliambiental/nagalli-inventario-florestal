@@ -19,28 +19,35 @@ import {
   calcIVI,
 } from "../utils/calculations";
 import { fmtCm, fmtM, fmtM2, fmtM3, fmtPct } from "../utils/formats";
-import type { Tree, Project } from "../types";
+import { useMemo } from "react";
+import { calcSufficiency } from "../utils/sufficiency";
+import { exportXlsx, exportKml } from "../utils/export";
+import { useTheme } from "../contexts/ThemeContext";
+import type { Tree, Project, Plot } from "../types";
 import type { RootStackParamList } from "../types/navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Report">;
 
 export function ReportScreen({ route }: Props) {
   const { projectId } = route.params;
+  const { colors, isDark, toggle } = useTheme();
   const [project, setProject] = useState<Project | null>(null);
   const [trees, setTrees] = useState<Tree[]>([]);
+  const [plots, setPlots] = useState<Plot[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       getProject(projectId).then(setProject);
-      loadAllTrees();
+      loadAllData();
     }, [projectId])
   );
 
-  const loadAllTrees = async () => {
-    const plots = await listPlots(projectId);
+  const loadAllData = async () => {
+    const p = await listPlots(projectId);
+    setPlots(p);
     const allTrees: Tree[] = [];
-    for (const p of plots) {
-      const ts = await listTrees(p.id);
+    for (const plot of p) {
+      const ts = await listTrees(plot.id);
       allTrees.push(...ts);
     }
     setTrees(allTrees);
@@ -48,10 +55,12 @@ export function ReportScreen({ route }: Props) {
 
   if (!project) return null;
 
+  const styles = useStyles(colors);
   const results = calcPlotResults(trees);
   const shannon = calcShannon(trees);
   const pielou = calcPielou(trees, shannon);
   const ivi = calcIVI(trees);
+  const sufficiency = calcSufficiency(trees);
 
   const handleShare = async () => {
     const lines = [
@@ -123,6 +132,43 @@ export function ReportScreen({ route }: Props) {
         ))}
       </Section>
 
+      {/* Suficiência amostral */}
+      <Section title="Suficiência amostral">
+        <Text style={styles.sufficiencyText}>
+          {sufficiency.sufficient
+            ? "✅ Suficiência amostral atingida"
+            : "⚠️ Continue amostrando — a curva de espécies ainda não estabilizou"}
+        </Text>
+        <StatRow label="Espécies registradas" value={String(sufficiency.totalSpecies)} />
+        <StatRow
+          label="Últimas amostras"
+          value={`${sufficiency.sampled.length} pontos`}
+        />
+      </Section>
+
+      {/* Export / Actions */}
+      <View style={styles.actionRow}>
+        {project && (
+          <>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: colors.primary }]}
+              onPress={() => exportXlsx(project, plots, trees)}
+            >
+              <Text style={styles.actionText}>📊 Excel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: colors.secondary }]}
+              onPress={() => exportKml(project, plots, trees)}
+            >
+              <Text style={styles.actionText}>🗺️ KML</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]} onPress={toggle}>
+          <Text style={[styles.actionText, { color: colors.text }]}>{isDark ? "☀️ Claro" : "🌙 Escuro"}</Text>
+        </TouchableOpacity>
+      </View>
+
       <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
         <Text style={styles.shareText}>Compartilhar</Text>
       </TouchableOpacity>
@@ -154,57 +200,69 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-  header: { marginBottom: 20 },
-  projectName: { fontSize: 22, fontWeight: "700", color: colors.text },
-  projectMeta: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
-  section: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 1,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.primary,
-    marginBottom: 10,
-  },
-  statRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border + "40",
-  },
-  statLabel: { fontSize: 14, color: colors.textSecondary },
-  statValue: { fontSize: 14, fontWeight: "600", color: colors.text },
-  iviRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border + "40",
-  },
-  iviPos: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.textLight,
-    width: 24,
-  },
-  iviInfo: { flex: 1 },
-  iviSpecies: { fontSize: 14, fontWeight: "600", color: colors.text, fontStyle: "italic" },
-  iviMeta: { fontSize: 11, color: colors.textLight, marginTop: 2 },
-  iviValue: { fontSize: 16, fontWeight: "700", color: colors.primary },
-  shareBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  shareText: { color: colors.white, fontSize: 16, fontWeight: "700" },
-});
+function useStyles(colors: any) {
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        container: { flex: 1, backgroundColor: colors.background },
+        content: { padding: 16, paddingBottom: 40 },
+        header: { marginBottom: 20 },
+        projectName: { fontSize: 22, fontWeight: "700", color: colors.text },
+        projectMeta: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
+        section: {
+          backgroundColor: colors.surface,
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 16,
+          elevation: 1,
+        },
+        sectionTitle: {
+          fontSize: 15,
+          fontWeight: "700",
+          color: colors.primary,
+          marginBottom: 10,
+        },
+        statRow: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          paddingVertical: 6,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border + "40",
+        },
+        statLabel: { fontSize: 14, color: colors.textSecondary },
+        statValue: { fontSize: 14, fontWeight: "600", color: colors.text },
+        iviRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          paddingVertical: 8,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border + "40",
+        },
+        iviPos: {
+          fontSize: 14,
+          fontWeight: "700",
+          color: colors.textLight,
+          width: 24,
+        },
+        iviInfo: { flex: 1 },
+        iviSpecies: { fontSize: 14, fontWeight: "600", color: colors.text, fontStyle: "italic" },
+        iviMeta: { fontSize: 11, color: colors.textLight, marginTop: 2 },
+        iviValue: { fontSize: 16, fontWeight: "700", color: colors.primary },
+        sufficiencyText: { fontSize: 14, color: colors.textSecondary, marginBottom: 8 },
+        actionRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+        actionBtn: {
+          flex: 1, borderRadius: 10, padding: 14, alignItems: "center",
+        },
+        actionText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+        shareBtn: {
+          backgroundColor: colors.primary,
+          borderRadius: 10,
+          padding: 16,
+          alignItems: "center",
+          marginTop: 8,
+        },
+        shareText: { color: colors.white, fontSize: 16, fontWeight: "700" },
+      }),
+    [colors]
+  );
+}

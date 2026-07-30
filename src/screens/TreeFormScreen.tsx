@@ -16,6 +16,8 @@ import { createTree, getTree, listTrees, updateTree, listSpeciesByPhyto } from "
 import { colors } from "../constants/colors";
 import { capToDbh, dbhToBasalArea, processTree } from "../utils/calculations";
 import { phytosanitaryOptions, phytoOptions } from "../utils/formats";
+import { PhotoCapture } from "../components/PhotoCapture";
+import { requestLocationPermission, getCurrentCoords } from "../utils/location";
 import type { Species, Stem } from "../types";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -33,6 +35,9 @@ export function TreeFormScreen({ route, navigation }: Props) {
   const [stemCount, setStemCount] = useState("1");
   const [phytosanitary, setPhytosanitary] = useState("");
   const [notes, setNotes] = useState("");
+  const [photoUri, setPhotoUri] = useState("");
+  const [latitude, setLatitude] = useState(0);
+  const [longitude, setLongitude] = useState(0);
 
   // Species picker
   const [showSpeciesModal, setShowSpeciesModal] = useState(false);
@@ -73,6 +78,20 @@ export function TreeFormScreen({ route, navigation }: Props) {
     }
   }, [treeId]);
 
+  // Request GPS on mount
+  useEffect(() => {
+    (async () => {
+      const granted = await requestLocationPermission();
+      if (granted) {
+        const coords = await getCurrentCoords();
+        if (coords) {
+          setLatitude(coords.latitude);
+          setLongitude(coords.longitude);
+        }
+      }
+    })();
+  }, []);
+
   // Auto-increment number for new trees
   useFocusEffect(
     useCallback(() => {
@@ -107,10 +126,10 @@ export function TreeFormScreen({ route, navigation }: Props) {
       basalAreaM2: stems > 1 ? ba * stems : ba,
       stemCount: stems,
       phytosanitary,
-      photoUri: "",
+      photoUri,
       notes: notes.trim(),
-      latitude: 0,
-      longitude: 0,
+      latitude,
+      longitude,
     };
     if (isEdit) {
       await updateTree(treeId!, data);
@@ -181,6 +200,15 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
       <Text style={styles.label}>Observações</Text>
       <TextInput style={styles.input} value={notes} onChangeText={setNotes} multiline numberOfLines={3} />
+
+      <Text style={styles.label}>Foto</Text>
+      <PhotoCapture onPhoto={setPhotoUri} currentUri={photoUri} />
+
+      {latitude !== 0 && (
+        <Text style={styles.coords}>
+          📍 {latitude.toFixed(6)}, {longitude.toFixed(6)}
+        </Text>
+      )}
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
         <Text style={styles.saveText}>Salvar</Text>

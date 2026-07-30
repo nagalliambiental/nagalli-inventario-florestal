@@ -7,6 +7,7 @@ import { initDatabase } from "./src/db/database";
 import { seedSpecies } from "./src/db/seed";
 import * as SQLite from "expo-sqlite";
 import { colors } from "./src/constants/colors";
+import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { ProjectFormScreen } from "./src/screens/ProjectFormScreen";
 import { ProjectScreen } from "./src/screens/ProjectScreen";
@@ -18,7 +19,8 @@ import type { RootStackParamList } from "./src/types/navigation";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export default function App() {
+function AppContent() {
+  const { colors } = useTheme();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,24 +42,24 @@ export default function App() {
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.error}>Erro: {error}</Text>
+      <View style={[styles.center, { backgroundColor: colors.background }]}>
+        <Text style={[styles.error, { color: colors.error }]}>Erro: {error}</Text>
       </View>
     );
   }
 
   if (!ready) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loading}>{error || "Inicializando..."}</Text>
+        <Text style={[styles.loading, { color: colors.textSecondary }]}>{error || "Inicializando..."}</Text>
       </View>
     );
   }
 
   return (
     <NavigationContainer>
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },
@@ -65,52 +67,28 @@ export default function App() {
           headerTitleStyle: { fontWeight: "600" },
         }}
       >
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{ title: "Inventário Florestal" }}
-        />
-        <Stack.Screen
-          name="ProjectForm"
-          component={ProjectFormScreen}
-          options={({ route }) => ({
-            title: route.params?.projectId ? "Editar projeto" : "Novo projeto",
-          })}
-        />
-        <Stack.Screen
-          name="Project"
-          component={ProjectScreen}
-          options={({ route }) => ({ title: "Projeto" })}
-        />
-        <Stack.Screen
-          name="PlotForm"
-          component={PlotFormScreen}
-          options={{ title: "Nova parcela" }}
-        />
-        <Stack.Screen
-          name="Plot"
-          component={PlotScreen}
-          options={{ title: "Parcela" }}
-        />
-        <Stack.Screen
-          name="TreeForm"
-          component={TreeFormScreen}
-          options={({ route }) => ({
-            title: route.params?.treeId ? "Editar árvore" : "Nova árvore",
-          })}
-        />
-        <Stack.Screen
-          name="Report"
-          component={ReportScreen}
-          options={{ title: "Relatórios" }}
-        />
+        <Stack.Screen name="Home" component={HomeScreen} options={{ title: "Inventário Florestal" }} />
+        <Stack.Screen name="ProjectForm" component={ProjectFormScreen} options={({ route }) => ({ title: route.params?.projectId ? "Editar projeto" : "Novo projeto" })} />
+        <Stack.Screen name="Project" component={ProjectScreen} options={{ title: "Projeto" }} />
+        <Stack.Screen name="PlotForm" component={PlotFormScreen} options={{ title: "Nova parcela" }} />
+        <Stack.Screen name="Plot" component={PlotScreen} options={{ title: "Parcela" }} />
+        <Stack.Screen name="TreeForm" component={TreeFormScreen} options={({ route }) => ({ title: route.params?.treeId ? "Editar árvore" : "Nova árvore" })} />
+        <Stack.Screen name="Report" component={ReportScreen} options={{ title: "Relatórios" }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
 
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background },
-  error: { color: colors.error, fontSize: 16 },
-  loading: { color: colors.textSecondary, fontSize: 15, marginTop: 12 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  error: { fontSize: 16 },
+  loading: { fontSize: 15, marginTop: 12 },
 });
