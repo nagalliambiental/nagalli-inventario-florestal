@@ -78,11 +78,11 @@ export function calcPlotResults(trees: Tree[]): {
   );
   const basalAreaTotal = trees.reduce((s, t) => s + t.basalAreaM2, 0);
   const volumeTotal = trees.reduce(
-    (s, t) => s + estimateVolume(t.dbhCm, t.heightM),
+    (s, t) => s + estimateVolume(t.dbhCm, t.heightComercialM),
     0
   );
   const avgHeight =
-    trees.reduce((s, t) => s + t.heightM, 0) / trees.length;
+    trees.reduce((s, t) => s + t.heightTotalM, 0) / trees.length;
   const avgDbh =
     trees.reduce((s, t) => s + t.dbhCm, 0) / trees.length;
 

@@ -11,7 +11,6 @@ export async function getCurrentCoords(): Promise<{ latitude: number; longitude:
   try {
     const loc = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.High,
-      timeout: 10000,
     });
     lastCoords = {
       latitude: loc.coords.latitude,

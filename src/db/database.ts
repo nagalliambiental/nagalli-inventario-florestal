@@ -14,7 +14,47 @@ let db: SQLite.SQLiteDatabase;
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   db = await SQLite.openDatabaseAsync("nagalli_inventario.db");
   await db.execAsync(CREATE_TABLES);
+  await migrateDatabase(db);
   return db;
+}
+
+// Migra bancos criados por versões antigas (coluna única height_m e
+// fustes sem altura) para o schema atual, sem perder os dados.
+async function migrateDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
+  const tableColumns = async (table: string): Promise<Set<string>> => {
+    const rows = await db.getAllAsync<any>(`PRAGMA table_info(${table})`);
+    return new Set(rows.map((r) => r.name));
+  };
+
+  const treeCols = await tableColumns("trees");
+  if (!treeCols.has("height_comercial_m")) {
+    await db.runAsync(
+      "ALTER TABLE trees ADD COLUMN height_comercial_m REAL DEFAULT 0"
+    );
+  }
+  if (!treeCols.has("height_total_m")) {
+    await db.runAsync(
+      "ALTER TABLE trees ADD COLUMN height_total_m REAL DEFAULT 0"
+    );
+  }
+  if (treeCols.has("height_m")) {
+    await db.runAsync(
+      `UPDATE trees SET height_total_m = height_m
+       WHERE height_m IS NOT NULL AND height_total_m = 0`
+    );
+  }
+
+  const stemCols = await tableColumns("stems");
+  if (!stemCols.has("height_comercial_m")) {
+    await db.runAsync(
+      "ALTER TABLE stems ADD COLUMN height_comercial_m REAL DEFAULT 0"
+    );
+  }
+  if (!stemCols.has("height_total_m")) {
+    await db.runAsync(
+      "ALTER TABLE stems ADD COLUMN height_total_m REAL DEFAULT 0"
+    );
+  }
 }
 
 // ── Projects ──
@@ -111,26 +151,36 @@ export async function getTree(id: number): Promise<Tree | null> {
   return row ? mapper.tree(row) : null;
 }
 
-export async function createTree(
-  data: Omit<Tree, "id" | "fustes" | "measuredAt">
-): Promise<number> {
-  const result = await db.runAsync(
-    `INSERT INTO trees (plot_id, number, species_id, species_name,
-      cap_cm, height_m, dbh_cm, basal_area_m2, stem_count,
-      phytosanitary, photo_uri, notes, latitude, longitude)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      data.plotId, data.number, data.speciesId, data.speciesName,
-      data.capCm, data.heightM, data.dbhCm, data.basalAreaM2, data.stemCount,
-      data.phytosanitary, data.photoUri, data.notes, data.latitude, data.longitude,
-    ]
-  );
-  return result.lastInsertRowId;
+export type TreePayload = Omit<Tree, "id" | "fustes" | "measuredAt"> & {
+  stems?: Omit<Stem, "id" | "treeId">[];
+};
+
+export async function createTree(data: TreePayload): Promise<number> {
+  let treeId = 0;
+  await db.withTransactionAsync(async () => {
+    const result = await db.runAsync(
+      `INSERT INTO trees (plot_id, number, species_id, species_name,
+        cap_cm, height_comercial_m, height_total_m, dbh_cm, basal_area_m2, stem_count,
+        phytosanitary, photo_uri, notes, latitude, longitude)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        data.plotId, data.number, data.speciesId, data.speciesName,
+        data.capCm, data.heightComercialM, data.heightTotalM, data.dbhCm,
+        data.basalAreaM2, data.stemCount,
+        data.phytosanitary, data.photoUri, data.notes, data.latitude, data.longitude,
+      ]
+    );
+    treeId = result.lastInsertRowId;
+    if (data.stems && data.stems.length > 0) {
+      await replaceStems(treeId, data.stems);
+    }
+  });
+  return treeId;
 }
 
 export async function updateTree(
   id: number,
-  data: Partial<Tree>
+  data: Partial<TreePayload>
 ): Promise<void> {
   const fields: string[] = [];
   const values: any[] = [];
@@ -138,17 +188,49 @@ export async function updateTree(
   if (data.speciesId !== undefined) { fields.push("species_id = ?"); values.push(data.speciesId); }
   if (data.speciesName !== undefined) { fields.push("species_name = ?"); values.push(data.speciesName); }
   if (data.capCm !== undefined) { fields.push("cap_cm = ?"); values.push(data.capCm); }
-  if (data.heightM !== undefined) { fields.push("height_m = ?"); values.push(data.heightM); }
+  if (data.heightComercialM !== undefined) { fields.push("height_comercial_m = ?"); values.push(data.heightComercialM); }
+  if (data.heightTotalM !== undefined) { fields.push("height_total_m = ?"); values.push(data.heightTotalM); }
   if (data.dbhCm !== undefined) { fields.push("dbh_cm = ?"); values.push(data.dbhCm); }
   if (data.basalAreaM2 !== undefined) { fields.push("basal_area_m2 = ?"); values.push(data.basalAreaM2); }
   if (data.stemCount !== undefined) { fields.push("stem_count = ?"); values.push(data.stemCount); }
   if (data.phytosanitary !== undefined) { fields.push("phytosanitary = ?"); values.push(data.phytosanitary); }
   if (data.notes !== undefined) { fields.push("notes = ?"); values.push(data.notes); }
   values.push(id);
-  await db.runAsync(
-    `UPDATE trees SET ${fields.join(", ")} WHERE id = ?`,
-    values
-  );
+
+  await db.withTransactionAsync(async () => {
+    if (fields.length > 0) {
+      await db.runAsync(
+        `UPDATE trees SET ${fields.join(", ")} WHERE id = ?`,
+        values
+      );
+    }
+    if (data.stems !== undefined) {
+      await replaceStems(id, data.stems);
+    }
+  });
+}
+
+async function replaceStems(
+  treeId: number,
+  stems: Omit<Stem, "id" | "treeId">[]
+): Promise<void> {
+  await db.runAsync("DELETE FROM stems WHERE tree_id = ?", [treeId]);
+  for (let i = 0; i < stems.length; i++) {
+    const s = stems[i];
+    await db.runAsync(
+      `INSERT INTO stems (tree_id, number, cap_cm, height_comercial_m, height_total_m, dbh_cm, basal_area_m2)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        treeId,
+        s.number || i + 1,
+        s.capCm,
+        s.heightComercialM,
+        s.heightTotalM,
+        s.dbhCm,
+        s.basalAreaM2,
+      ]
+    );
+  }
 }
 
 export async function deleteTree(id: number): Promise<void> {
@@ -169,9 +251,9 @@ export async function createStem(
   data: Omit<Stem, "id">
 ): Promise<number> {
   const result = await db.runAsync(
-    `INSERT INTO stems (tree_id, number, cap_cm, dbh_cm, basal_area_m2)
-     VALUES (?, ?, ?, ?, ?)`,
-    [data.treeId, data.number, data.capCm, data.dbhCm, data.basalAreaM2]
+    `INSERT INTO stems (tree_id, number, cap_cm, height_comercial_m, height_total_m, dbh_cm, basal_area_m2)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [data.treeId, data.number, data.capCm, data.heightComercialM, data.heightTotalM, data.dbhCm, data.basalAreaM2]
   );
   return result.lastInsertRowId;
 }
@@ -276,7 +358,8 @@ const mapper = {
     speciesId: r.species_id,
     speciesName: r.species_name,
     capCm: r.cap_cm,
-    heightM: r.height_m,
+    heightComercialM: r.height_comercial_m ?? 0,
+    heightTotalM: r.height_total_m ?? 0,
     dbhCm: r.dbh_cm,
     basalAreaM2: r.basal_area_m2,
     stemCount: r.stem_count,
@@ -293,6 +376,8 @@ const mapper = {
     treeId: r.tree_id,
     number: r.number,
     capCm: r.cap_cm,
+    heightComercialM: r.height_comercial_m ?? 0,
+    heightTotalM: r.height_total_m ?? 0,
     dbhCm: r.dbh_cm,
     basalAreaM2: r.basal_area_m2,
   }),

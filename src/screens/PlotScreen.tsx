@@ -79,7 +79,7 @@ export function PlotScreen({ route, navigation }: Props) {
             <View style={styles.cardRow}>
               <Text style={styles.meta}>CAP: {fmtCm(item.capCm)}</Text>
               <Text style={styles.meta}>DAP: {fmtCm(item.dbhCm)}</Text>
-              <Text style={styles.meta}>Alt: {fmtM(item.heightM)}</Text>
+              <Text style={styles.meta}>Alt. total: {fmtM(item.heightTotalM)}</Text>
               <Text style={styles.meta}>Fustes: {item.stemCount}</Text>
             </View>
           </TouchableOpacity>

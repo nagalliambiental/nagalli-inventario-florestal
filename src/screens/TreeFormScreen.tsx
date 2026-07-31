@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { createTree, getTree, listTrees, updateTree, listSpeciesByPhyto } from "../db/database";
+import { createTree, getTree, listTrees, updateTree, listSpeciesByPhyto, insertSpecies } from "../db/database";
 import { colors } from "../constants/colors";
 import { capToDbh, dbhToBasalArea, processTree } from "../utils/calculations";
 import { phytosanitaryOptions, phytoOptions } from "../utils/formats";
@@ -23,16 +23,33 @@ import type { RootStackParamList } from "../types/navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TreeForm">;
 
+type StemInput = {
+  capCm: string;
+  heightComercialM: string;
+  heightTotalM: string;
+};
+
+const emptyStem = (): StemInput => ({ capCm: "", heightComercialM: "", heightTotalM: "" });
+
 export function TreeFormScreen({ route, navigation }: Props) {
   const { plotId, treeId } = route.params;
   const isEdit = !!treeId;
 
   const [number, setNumber] = useState("");
+  // Campos usados apenas quando stems === 1 (fuste único)
   const [capCm, setCapCm] = useState("");
-  const [heightM, setHeightM] = useState("");
+  const [heightComercialM, setHeightComercialM] = useState("");
+  const [heightTotalM, setHeightTotalM] = useState("");
+
   const [speciesName, setSpeciesName] = useState("");
   const [speciesId, setSpeciesId] = useState<number | null>(null);
+
   const [stemCount, setStemCount] = useState("1");
+  const [showCustomStemInput, setShowCustomStemInput] = useState(false);
+  const [customStemText, setCustomStemText] = useState("");
+  // Campos usados apenas quando stems > 1 (múltiplos fustes)
+  const [stemsData, setStemsData] = useState<StemInput[]>([emptyStem()]);
+
   const [phytosanitary, setPhytosanitary] = useState("");
   const [notes, setNotes] = useState("");
   const [photoUri, setPhotoUri] = useState("");
@@ -44,11 +61,31 @@ export function TreeFormScreen({ route, navigation }: Props) {
   const [phytoFilter, setPhytoFilter] = useState("Mata Atlântica");
   const [speciesList, setSpeciesList] = useState<Species[]>([]);
 
-  // Computed
+  // Nova espécie manual
+  const [showNewSpeciesModal, setShowNewSpeciesModal] = useState(false);
+  const [newSpecies, setNewSpecies] = useState({
+    popularName: "",
+    scientificName: "",
+    family: "",
+    woodDensity: "",
+  });
+
+  const stems = parseInt(stemCount) || 1;
+
+  // Computed (fuste único)
   const cap = parseFloat(capCm) || 0;
   const dbh = capToDbh(cap);
   const ba = dbhToBasalArea(dbh);
-  const stems = parseInt(stemCount) || 1;
+
+  // Mantém stemsData sincronizado com a quantidade escolhida
+  useEffect(() => {
+    setStemsData((prev) => {
+      const arr = [...prev];
+      while (arr.length < stems) arr.push(emptyStem());
+      while (arr.length > stems) arr.pop();
+      return arr;
+    });
+  }, [stems]);
 
   useFocusEffect(
     useCallback(() => {
@@ -67,10 +104,20 @@ export function TreeFormScreen({ route, navigation }: Props) {
         if (t) {
           setNumber(String(t.number));
           setCapCm(String(t.capCm));
-          setHeightM(String(t.heightM));
+          setHeightComercialM(String(t.heightComercialM ?? ""));
+          setHeightTotalM(String(t.heightTotalM ?? ""));
           setSpeciesName(t.speciesName || "");
           setSpeciesId(t.speciesId);
           setStemCount(String(t.stemCount));
+          if (t.fustes && t.fustes.length > 0) {
+            setStemsData(
+              t.fustes.map((f) => ({
+                capCm: String(f.capCm || ""),
+                heightComercialM: String(f.heightComercialM || ""),
+                heightTotalM: String(f.heightTotalM || ""),
+              }))
+            );
+          }
           setPhytosanitary(t.phytosanitary || "");
           setNotes(t.notes || "");
         }
@@ -78,7 +125,6 @@ export function TreeFormScreen({ route, navigation }: Props) {
     }
   }, [treeId]);
 
-  // Request GPS on mount
   useEffect(() => {
     (async () => {
       const granted = await requestLocationPermission();
@@ -92,13 +138,12 @@ export function TreeFormScreen({ route, navigation }: Props) {
     })();
   }, []);
 
-  // Auto-increment number for new trees
   useFocusEffect(
     useCallback(() => {
       if (!isEdit) {
         listTrees(plotId).then((trees) => {
-            const max = Math.max(0, ...trees.map((t) => t.number));
-            setNumber(String(max + 1));
+          const max = Math.max(0, ...trees.map((t) => t.number));
+          setNumber(String(max + 1));
         });
       }
     }, [plotId])
@@ -110,32 +155,134 @@ export function TreeFormScreen({ route, navigation }: Props) {
     setShowSpeciesModal(false);
   };
 
-  const handleSave = async () => {
-    if (!capCm || cap <= 0) {
-      Alert.alert("CAP obrigatório");
+  const handleAddSpecies = async () => {
+    const scientificName = newSpecies.scientificName.trim();
+    if (!scientificName) {
+      Alert.alert("Nome científico obrigatório");
       return;
     }
-    const data = {
-      plotId,
-      number: parseInt(number) || 1,
-      speciesId,
-      speciesName,
-      capCm: cap,
-      heightM: parseFloat(heightM) || 0,
-      dbhCm: dbh,
-      basalAreaM2: stems > 1 ? ba * stems : ba,
-      stemCount: stems,
-      phytosanitary,
-      photoUri,
-      notes: notes.trim(),
-      latitude,
-      longitude,
+    const woodDensity = parseFloat(newSpecies.woodDensity.replace(",", "."));
+    const created: Species = {
+      id: 0,
+      popularName: newSpecies.popularName.trim(),
+      scientificName,
+      family: newSpecies.family.trim(),
+      phytophysiognomy: phytoFilter,
+      woodDensity: isNaN(woodDensity) ? 0 : woodDensity,
     };
-    if (isEdit) {
-      await updateTree(treeId!, data);
+    created.id = await insertSpecies(created);
+    setSpeciesList((prev) =>
+      [...prev, created].sort((a, b) =>
+        a.scientificName.localeCompare(b.scientificName)
+      )
+    );
+    setSpeciesName(scientificName);
+    setSpeciesId(created.id);
+    setNewSpecies({ popularName: "", scientificName: "", family: "", woodDensity: "" });
+    setShowNewSpeciesModal(false);
+    setShowSpeciesModal(false);
+  };
+
+  const updateStemField = (index: number, field: keyof StemInput, value: string) => {
+    setStemsData((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleStemCountPress = (n: number) => {
+    setStemCount(String(n));
+    setShowCustomStemInput(false);
+  };
+
+  const handleCustomStemChange = (value: string) => {
+    setCustomStemText(value);
+    const n = parseInt(value, 10);
+    if (!isNaN(n) && n > 0) setStemCount(String(n));
+  };
+
+  const handleSave = async () => {
+    if (stems === 1) {
+      if (!capCm || cap <= 0) {
+        Alert.alert("CAP obrigatório");
+        return;
+      }
     } else {
-      await createTree(data);
+      const invalido = stemsData.some((s) => !s.capCm || parseFloat(s.capCm) <= 0);
+      if (invalido) {
+        Alert.alert("Preencha o CAP de todos os fustes");
+        return;
+      }
     }
+
+    if (stems === 1) {
+      const data = {
+        plotId,
+        number: parseInt(number) || 1,
+        speciesId,
+        speciesName,
+        capCm: cap,
+        heightComercialM: parseFloat(heightComercialM) || 0,
+        heightTotalM: parseFloat(heightTotalM) || 0,
+        dbhCm: dbh,
+        basalAreaM2: ba,
+        stemCount: 1,
+        phytosanitary,
+        photoUri,
+        notes: notes.trim(),
+        latitude,
+        longitude,
+      };
+      if (isEdit) {
+        await updateTree(treeId!, { ...data, stems: [] });
+      } else {
+        await createTree(data);
+      }
+    } else {
+      // Múltiplos fustes: agrega área basal total e usa a maior altura total como referência da árvore.
+      const parsedStems = stemsData.map((s, i) => {
+        const stemCap = parseFloat(s.capCm) || 0;
+        const stemDbh = capToDbh(stemCap);
+        const stemBa = dbhToBasalArea(stemDbh);
+        return {
+          number: i + 1,
+          capCm: stemCap,
+          dbhCm: stemDbh,
+          basalAreaM2: stemBa,
+          heightComercialM: parseFloat(s.heightComercialM) || 0,
+          heightTotalM: parseFloat(s.heightTotalM) || 0,
+        };
+      });
+      const totalBa = parsedStems.reduce((sum, s) => sum + s.basalAreaM2, 0);
+      const maxHeightTotal = Math.max(...parsedStems.map((s) => s.heightTotalM));
+      const maxHeightComercial = Math.max(...parsedStems.map((s) => s.heightComercialM));
+
+      const data = {
+        plotId,
+        number: parseInt(number) || 1,
+        speciesId,
+        speciesName,
+        capCm: 0, // não se aplica em árvore multifuste — CAP fica por fuste
+        heightComercialM: maxHeightComercial,
+        heightTotalM: maxHeightTotal,
+        dbhCm: 0,
+        basalAreaM2: totalBa,
+        stemCount: stems,
+        phytosanitary,
+        photoUri,
+        notes: notes.trim(),
+        latitude,
+        longitude,
+      };
+
+      if (isEdit) {
+        await updateTree(treeId!, { ...data, stems: parsedStems });
+      } else {
+        await createTree({ ...data, stems: parsedStems });
+      }
+    }
+
     navigation.goBack();
   };
 
@@ -144,39 +291,109 @@ export function TreeFormScreen({ route, navigation }: Props) {
       <Text style={styles.label}>Nº da árvore</Text>
       <TextInput style={styles.input} value={number} onChangeText={setNumber} keyboardType="number-pad" />
 
-      <Text style={styles.label}>CAP (cm) *</Text>
-      <TextInput
-        style={styles.input}
-        value={capCm}
-        onChangeText={setCapCm}
-        keyboardType="decimal-pad"
-        placeholder="Ex: 78,5"
-      />
-      {cap > 0 && (
-        <Text style={styles.computed}>DAP: {dbh.toFixed(1)} cm • Área basal: {ba.toFixed(4)} m²</Text>
-      )}
-
-      <Text style={styles.label}>Altura (m)</Text>
-      <TextInput
-        style={styles.input}
-        value={heightM}
-        onChangeText={setHeightM}
-        keyboardType="decimal-pad"
-        placeholder="Ex: 15,5"
-      />
-
       <Text style={styles.label}>Nº de fustes</Text>
       <View style={styles.stemRow}>
         {[1, 2, 3, 4, 5].map((n) => (
           <TouchableOpacity
             key={n}
-            style={[styles.stemBtn, stems === n && styles.stemBtnActive]}
-            onPress={() => setStemCount(String(n))}
+            style={[styles.stemBtn, stems === n && !showCustomStemInput && styles.stemBtnActive]}
+            onPress={() => handleStemCountPress(n)}
           >
-            <Text style={[styles.stemText, stems === n && styles.stemTextActive]}>{n}</Text>
+            <Text style={[styles.stemText, stems === n && !showCustomStemInput && styles.stemTextActive]}>
+              {n}
+            </Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity
+          style={[styles.stemBtn, showCustomStemInput && styles.stemBtnActive]}
+          onPress={() => setShowCustomStemInput(true)}
+        >
+          <Text style={[styles.stemText, showCustomStemInput && styles.stemTextActive]}>5+</Text>
+        </TouchableOpacity>
       </View>
+
+      {showCustomStemInput && (
+        <TextInput
+          style={[styles.input, { marginTop: 8 }]}
+          value={customStemText}
+          onChangeText={handleCustomStemChange}
+          keyboardType="number-pad"
+          placeholder="Quantidade de fustes"
+        />
+      )}
+
+      {stems === 1 ? (
+        <>
+          <Text style={styles.label}>CAP (cm) *</Text>
+          <TextInput
+            style={styles.input}
+            value={capCm}
+            onChangeText={setCapCm}
+            keyboardType="decimal-pad"
+            placeholder="Ex: 78,5"
+          />
+          {cap > 0 && (
+            <Text style={styles.computed}>DAP: {dbh.toFixed(1)} cm • Área basal: {ba.toFixed(4)} m²</Text>
+          )}
+
+          <Text style={styles.label}>Altura comercial (m)</Text>
+          <TextInput
+            style={styles.input}
+            value={heightComercialM}
+            onChangeText={setHeightComercialM}
+            keyboardType="decimal-pad"
+            placeholder="Ex: 8,0"
+          />
+
+          <Text style={styles.label}>Altura total (m)</Text>
+          <TextInput
+            style={styles.input}
+            value={heightTotalM}
+            onChangeText={setHeightTotalM}
+            keyboardType="decimal-pad"
+            placeholder="Ex: 15,5"
+          />
+        </>
+      ) : (
+        stemsData.map((stem, i) => {
+          const stemCap = parseFloat(stem.capCm) || 0;
+          const stemDbh = capToDbh(stemCap);
+          const stemBa = dbhToBasalArea(stemDbh);
+          return (
+            <View key={i} style={styles.stemBlock}>
+              <Text style={styles.stemBlockTitle}>Fuste {i + 1}</Text>
+
+              <Text style={styles.label}>CAP (cm) *</Text>
+              <TextInput
+                style={styles.input}
+                value={stem.capCm}
+                onChangeText={(v) => updateStemField(i, "capCm", v)}
+                keyboardType="decimal-pad"
+                placeholder="Ex: 45,0"
+              />
+              {stemCap > 0 && (
+                <Text style={styles.computed}>DAP: {stemDbh.toFixed(1)} cm • Área basal: {stemBa.toFixed(4)} m²</Text>
+              )}
+
+              <Text style={styles.label}>Altura comercial (m)</Text>
+              <TextInput
+                style={styles.input}
+                value={stem.heightComercialM}
+                onChangeText={(v) => updateStemField(i, "heightComercialM", v)}
+                keyboardType="decimal-pad"
+              />
+
+              <Text style={styles.label}>Altura total (m)</Text>
+              <TextInput
+                style={styles.input}
+                value={stem.heightTotalM}
+                onChangeText={(v) => updateStemField(i, "heightTotalM", v)}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          );
+        })
+      )}
 
       <Text style={styles.label}>Espécie</Text>
       <TouchableOpacity style={styles.speciesBtn} onPress={() => setShowSpeciesModal(true)}>
@@ -214,14 +431,18 @@ export function TreeFormScreen({ route, navigation }: Props) {
         <Text style={styles.saveText}>Salvar</Text>
       </TouchableOpacity>
 
-      {/* Species Modal */}
       <Modal visible={showSpeciesModal} animationType="slide">
         <View style={styles.modal}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Selecionar espécie</Text>
-            <TouchableOpacity onPress={() => setShowSpeciesModal(false)}>
-              <Text style={styles.closeBtn}>Fechar</Text>
-            </TouchableOpacity>
+            <View style={styles.modalHeaderActions}>
+              <TouchableOpacity onPress={() => setShowNewSpeciesModal(true)}>
+                <Text style={styles.addBtn}>＋ Nova</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowSpeciesModal(false)}>
+                <Text style={styles.closeBtn}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           <View style={styles.phytoFilterRow}>
             {phytoOptions.map((p) => (
@@ -249,6 +470,62 @@ export function TreeFormScreen({ route, navigation }: Props) {
           />
         </View>
       </Modal>
+
+      <Modal visible={showNewSpeciesModal} animationType="slide">
+        <View style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Nova espécie</Text>
+            <TouchableOpacity onPress={() => setShowNewSpeciesModal(false)}>
+              <Text style={styles.closeBtn}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.newSpeciesForm} keyboardShouldPersistTaps="handled">
+            <Text style={styles.label}>Nome científico *</Text>
+            <TextInput
+              style={styles.input}
+              value={newSpecies.scientificName}
+              onChangeText={(v) => setNewSpecies((s) => ({ ...s, scientificName: v }))}
+              placeholder="Ex: Anadenanthera peregrina"
+              autoCapitalize="words"
+            />
+
+            <Text style={styles.label}>Nome popular</Text>
+            <TextInput
+              style={styles.input}
+              value={newSpecies.popularName}
+              onChangeText={(v) => setNewSpecies((s) => ({ ...s, popularName: v }))}
+              placeholder="Ex: Angico"
+              autoCapitalize="words"
+            />
+
+            <Text style={styles.label}>Família</Text>
+            <TextInput
+              style={styles.input}
+              value={newSpecies.family}
+              onChangeText={(v) => setNewSpecies((s) => ({ ...s, family: v }))}
+              placeholder="Ex: Fabaceae"
+              autoCapitalize="words"
+            />
+
+            <Text style={styles.label}>Densidade da madeira (kg/m³)</Text>
+            <TextInput
+              style={styles.input}
+              value={newSpecies.woodDensity}
+              onChangeText={(v) => setNewSpecies((s) => ({ ...s, woodDensity: v }))}
+              placeholder="Ex: 0,65"
+              keyboardType="decimal-pad"
+            />
+
+            <Text style={styles.phytoHint}>
+              A espécie será salva na fitofisionomia selecionada: {phytoFilter}
+            </Text>
+
+            <TouchableOpacity style={styles.saveBtn} onPress={handleAddSpecies}>
+              <Text style={styles.saveText}>Salvar espécie</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -267,7 +544,8 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   computed: { fontSize: 13, color: colors.primary, marginTop: 4, fontWeight: "500" },
-  stemRow: { flexDirection: "row", gap: 8 },
+  coords: { fontSize: 13, color: colors.textSecondary, marginTop: 8, textAlign: "center" },
+  stemRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   stemBtn: {
     width: 44,
     height: 44,
@@ -281,6 +559,15 @@ const styles = StyleSheet.create({
   stemBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   stemText: { fontSize: 16, fontWeight: "600", color: colors.text },
   stemTextActive: { color: colors.white },
+  stemBlock: {
+    marginTop: 20,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stemBlockTitle: { fontSize: 15, fontWeight: "700", color: colors.text },
   speciesBtn: {
     backgroundColor: colors.surface,
     borderRadius: 8,
@@ -310,7 +597,6 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   saveText: { color: colors.white, fontSize: 17, fontWeight: "700" },
-  // Modal
   modal: { flex: 1, backgroundColor: colors.background },
   modalHeader: {
     flexDirection: "row",
@@ -322,7 +608,16 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   modalTitle: { fontSize: 18, fontWeight: "700", color: colors.text },
+  modalHeaderActions: { flexDirection: "row", gap: 16, alignItems: "center" },
+  addBtn: { fontSize: 16, color: colors.secondary, fontWeight: "700" },
   closeBtn: { fontSize: 16, color: colors.primary, fontWeight: "600" },
+  newSpeciesForm: { flex: 1, padding: 16 },
+  phytoHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 16,
+    fontStyle: "italic",
+  },
   phytoFilterRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, padding: 12 },
   filterBtn: {
     paddingHorizontal: 12,

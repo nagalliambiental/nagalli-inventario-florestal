@@ -101,23 +101,23 @@ export function ReportScreen({ route }: Props) {
       </View>
 
       {/* General stats */}
-      <Section title="Estatísticas gerais">
-        <StatRow label="Total de árvores" value={String(trees.length)} />
-        <StatRow label="Total de espécies" value={String(results.speciesCount)} />
-        <StatRow label="DAP médio" value={fmtCm(results.avgDbh)} />
-        <StatRow label="Altura média" value={fmtM(results.avgHeight)} />
-        <StatRow label="Área basal total" value={fmtM2(results.basalAreaTotal)} />
-        <StatRow label="Volume total" value={fmtM3(results.volumeTotal)} />
+      <Section styles={styles} title="Estatísticas gerais">
+        <StatRow styles={styles} label="Total de árvores" value={String(trees.length)} />
+        <StatRow styles={styles} label="Total de espécies" value={String(results.speciesCount)} />
+        <StatRow styles={styles} label="DAP médio" value={fmtCm(results.avgDbh)} />
+        <StatRow styles={styles} label="Altura média" value={fmtM(results.avgHeight)} />
+        <StatRow styles={styles} label="Área basal total" value={fmtM2(results.basalAreaTotal)} />
+        <StatRow styles={styles} label="Volume total" value={fmtM3(results.volumeTotal)} />
       </Section>
 
       {/* Diversity */}
-      <Section title="Diversidade">
-        <StatRow label="Shannon-Wiener (H')" value={shannon.toFixed(3)} />
-        <StatRow label="Pielou (J')" value={pielou.toFixed(3)} />
+      <Section styles={styles} title="Diversidade">
+        <StatRow styles={styles} label="Shannon-Wiener (H')" value={shannon.toFixed(3)} />
+        <StatRow styles={styles} label="Pielou (J')" value={pielou.toFixed(3)} />
       </Section>
 
       {/* IVI */}
-      <Section title="IVI — Índice de Valor de Importância">
+      <Section styles={styles} title="IVI — Índice de Valor de Importância">
         {ivi.map((s, i) => (
           <View key={s.speciesName} style={styles.iviRow}>
             <Text style={styles.iviPos}>{i + 1}.</Text>
@@ -133,14 +133,14 @@ export function ReportScreen({ route }: Props) {
       </Section>
 
       {/* Suficiência amostral */}
-      <Section title="Suficiência amostral">
+      <Section styles={styles} title="Suficiência amostral">
         <Text style={styles.sufficiencyText}>
           {sufficiency.sufficient
             ? "✅ Suficiência amostral atingida"
             : "⚠️ Continue amostrando — a curva de espécies ainda não estabilizou"}
         </Text>
-        <StatRow label="Espécies registradas" value={String(sufficiency.totalSpecies)} />
-        <StatRow
+        <StatRow styles={styles} label="Espécies registradas" value={String(sufficiency.totalSpecies)} />
+        <StatRow styles={styles}
           label="Últimas amostras"
           value={`${sufficiency.sampled.length} pontos`}
         />
@@ -179,9 +179,11 @@ export function ReportScreen({ route }: Props) {
 function Section({
   title,
   children,
+  styles,
 }: {
   title: string;
   children: React.ReactNode;
+  styles: any;
 }) {
   return (
     <View style={styles.section}>
@@ -191,7 +193,7 @@ function Section({
   );
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
+function StatRow({ label, value, styles }: { label: string; value: string; styles: any }) {
   return (
     <View style={styles.statRow}>
       <Text style={styles.statLabel}>{label}</Text>

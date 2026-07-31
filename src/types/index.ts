@@ -33,7 +33,8 @@ export interface Tree {
   speciesId: number | null;
   speciesName: string;
   capCm: number;
-  heightM: number;
+  heightComercialM: number;
+  heightTotalM: number;
   dbhCm: number;
   basalAreaM2: number;
   stemCount: number;
@@ -51,6 +52,8 @@ export interface Stem {
   treeId: number;
   number: number;
   capCm: number;
+  heightComercialM: number;
+  heightTotalM: number;
   dbhCm: number;
   basalAreaM2: number;
 }

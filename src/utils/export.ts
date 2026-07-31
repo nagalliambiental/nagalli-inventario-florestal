@@ -11,13 +11,15 @@ export async function exportXlsx(
 
   const treeRows = trees.map((t) => {
     const plot = plots.find((p) => p.id === t.plotId);
+    const cap = t.capCm || t.fustes.reduce((s, f) => s + f.capCm, 0);
     return {
       Parcela: plot?.code || "",
       "Nº Árvore": t.number,
       Espécie: t.speciesName,
-      "CAP (cm)": t.capCm,
+      "CAP (cm)": cap,
       "DAP (cm)": t.dbhCm,
-      "Altura (m)": t.heightM,
+      "Altura comercial (m)": t.heightComercialM,
+      "Altura total (m)": t.heightTotalM,
       "Área basal (m²)": t.basalAreaM2,
       Fustes: t.stemCount,
       "Condição": t.phytosanitary,
@@ -27,9 +29,31 @@ export async function exportXlsx(
     };
   });
 
+  const stemRows: any[] = [];
+  trees.forEach((t) => {
+    const plot = plots.find((p) => p.id === t.plotId);
+    (t.fustes || []).forEach((f, i) => {
+      stemRows.push({
+        Parcela: plot?.code || "",
+        "Nº Árvore": t.number,
+        Fuste: i + 1,
+        "CAP (cm)": f.capCm,
+        "DAP (cm)": f.dbhCm,
+        "Altura comercial (m)": f.heightComercialM,
+        "Altura total (m)": f.heightTotalM,
+        "Área basal (m²)": f.basalAreaM2,
+      });
+    });
+  });
+
   const ws = XLSX.utils.json_to_sheet(treeRows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Árvores");
+
+  if (stemRows.length > 0) {
+    const wsStems = XLSX.utils.json_to_sheet(stemRows);
+    XLSX.utils.book_append_sheet(wb, wsStems, "Fustes");
+  }
 
   // Summary sheet
   const summary = [
@@ -65,7 +89,7 @@ export async function exportKml(
         (t) => `
     <Placemark>
       <name>#${t.number} - ${t.speciesName || "N/I"}</name>
-      <description>CAP: ${t.capCm} cm, Alt: ${t.heightM} m, DAP: ${t.dbhCm} cm</description>
+      <description>CAP: ${t.capCm} cm, Alt total: ${t.heightTotalM} m, DAP: ${t.dbhCm} cm</description>
       <Point><coordinates>${t.longitude},${t.latitude},0</coordinates></Point>
     </Placemark>`
       )

@@ -26,7 +26,10 @@ export function TreeCard({ tree, onPress, onLongPress }: Props) {
       <View style={styles.row}>
         <Text style={styles.meta}>CAP: {fmtCm(tree.capCm)}</Text>
         <Text style={styles.meta}>DAP: {fmtCm(tree.dbhCm)}</Text>
-        <Text style={styles.meta}>Alt: {fmtM(tree.heightM)}</Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.meta}>Alt. comercial: {fmtM(tree.heightComercialM)}</Text>
+        <Text style={styles.meta}>Alt. total: {fmtM(tree.heightTotalM)}</Text>
       </View>
       {tree.fustes && tree.fustes.length > 1 && (
         <Text style={styles.fustes}>
