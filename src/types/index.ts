@@ -65,6 +65,19 @@ export interface Species {
   family: string;
   phytophysiognomy: string;
   woodDensity: number;
+  habit: string;
+  distribution: string;
+  endemism: string;
+  conservationStatus: string;
+  growth: string;
+  lifeSpan: string;
+  dbhAmplitude: string;
+  heightAmplitude: string;
+  epiphytes: string;
+  herbaceousLianas: string;
+  woodyLianas: string;
+  grasses: string;
+  canopyRegeneration: string;
 }
 
 export interface ProjectSummary {

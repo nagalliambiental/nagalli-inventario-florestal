@@ -1,6 +1,24 @@
 import type { Species } from "../types";
 
-export const defaultSpecies: Omit<Species, "id">[] = [
+type BaseSpecies = Omit<
+  Species,
+  | "id"
+  | "habit"
+  | "distribution"
+  | "endemism"
+  | "conservationStatus"
+  | "growth"
+  | "lifeSpan"
+  | "dbhAmplitude"
+  | "heightAmplitude"
+  | "epiphytes"
+  | "herbaceousLianas"
+  | "woodyLianas"
+  | "grasses"
+  | "canopyRegeneration"
+>;
+
+const rawSpecies: BaseSpecies[] = [
   // ── Amazônia ──
   { popularName: "Ipê-roxo", scientificName: "Handroanthus impetiginosus", family: "Bignoniaceae", phytophysiognomy: "Amazônia", woodDensity: 0.85 },
   { popularName: "Mogno", scientificName: "Swietenia macrophylla", family: "Meliaceae", phytophysiognomy: "Amazônia", woodDensity: 0.62 },
@@ -70,3 +88,20 @@ export const defaultSpecies: Omit<Species, "id">[] = [
   { popularName: "Araçá", scientificName: "Psidium cattleianum", family: "Myrtaceae", phytophysiognomy: "Pampa", woodDensity: 0.71 },
   { popularName: "Guabiju", scientificName: "Myrcianthes pungens", family: "Myrtaceae", phytophysiognomy: "Pampa", woodDensity: 0.74 },
 ];
+
+export const defaultSpecies: Omit<Species, "id">[] = rawSpecies.map((s) => ({
+  habit: "",
+  distribution: "",
+  endemism: "",
+  conservationStatus: "",
+  growth: "",
+  lifeSpan: "",
+  dbhAmplitude: "",
+  heightAmplitude: "",
+  epiphytes: "",
+  herbaceousLianas: "",
+  woodyLianas: "",
+  grasses: "",
+  canopyRegeneration: "",
+  ...s,
+}));

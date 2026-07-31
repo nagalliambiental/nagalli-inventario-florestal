@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { createTree, getTree, listTrees, updateTree, listSpeciesByPhyto, insertSpecies } from "../db/database";
+import { createTree, getTree, listTrees, updateTree, listSpeciesByPhyto, insertSpecies, deleteSpecies } from "../db/database";
 import { colors } from "../constants/colors";
 import { capToDbh, dbhToBasalArea, processTree } from "../utils/calculations";
 import { phytosanitaryOptions, phytoOptions } from "../utils/formats";
@@ -30,6 +30,19 @@ type StemInput = {
 };
 
 const emptyStem = (): StemInput => ({ capCm: "", heightComercialM: "", heightTotalM: "" });
+
+const HABIT_OPTIONS = ["A - Arbórea", "Ar - Arbustiva", "Li - Liana", "Ep - Epífita", "Pt - Pteridófita", "B - Bambu"];
+const DISTRIBUTION_OPTIONS = ["Comum", "Frequente", "Rara"];
+const ENDEMISM_OPTIONS = ["Não", "Mata Atlântica", "Brasil"];
+const CONSERVATION_OPTIONS = ["EN (IAT, 1995)", "EN (MMA, 2022)", "VU (MMA, 2022)", "CR (MMA, 2022)", "NT (MMA, 2022)", "LC (MMA, 2022)"];
+const GROWTH_OPTIONS = ["Rápido", "Moderado", "Lento"];
+const LIFE_SPAN_OPTIONS = ["Curta", "Média", "Longa"];
+const AMPLITUDE_OPTIONS = ["Pequena", "Média", "Grande"];
+const EPIPHYTES_OPTIONS = ["Nenhuma", "Poucas", "Abundante"];
+const LIANAS_OPTIONS = ["Nenhuma", "Raras", "Poucas", "Abundante"];
+const WOODY_LIANAS_OPTIONS = ["Ausente", "Presente"];
+const GRASSES_OPTIONS = ["Nenhuma", "Raras", "Poucas", "Abundante"];
+const REGENERATION_OPTIONS = ["Nenhuma", "Pouca", "Regular", "Abundante"];
 
 export function TreeFormScreen({ route, navigation }: Props) {
   const { plotId, treeId } = route.params;
@@ -68,6 +81,19 @@ export function TreeFormScreen({ route, navigation }: Props) {
     scientificName: "",
     family: "",
     woodDensity: "",
+    habit: "",
+    distribution: "",
+    endemism: "",
+    conservationStatus: "",
+    growth: "",
+    lifeSpan: "",
+    dbhAmplitude: "",
+    heightAmplitude: "",
+    epiphytes: "",
+    herbaceousLianas: "",
+    woodyLianas: "",
+    grasses: "",
+    canopyRegeneration: "",
   });
 
   const stems = parseInt(stemCount) || 1;
@@ -169,6 +195,19 @@ export function TreeFormScreen({ route, navigation }: Props) {
       family: newSpecies.family.trim(),
       phytophysiognomy: phytoFilter,
       woodDensity: isNaN(woodDensity) ? 0 : woodDensity,
+      habit: newSpecies.habit,
+      distribution: newSpecies.distribution,
+      endemism: newSpecies.endemism,
+      conservationStatus: newSpecies.conservationStatus,
+      growth: newSpecies.growth,
+      lifeSpan: newSpecies.lifeSpan,
+      dbhAmplitude: newSpecies.dbhAmplitude,
+      heightAmplitude: newSpecies.heightAmplitude,
+      epiphytes: newSpecies.epiphytes,
+      herbaceousLianas: newSpecies.herbaceousLianas,
+      woodyLianas: newSpecies.woodyLianas,
+      grasses: newSpecies.grasses,
+      canopyRegeneration: newSpecies.canopyRegeneration,
     };
     created.id = await insertSpecies(created);
     setSpeciesList((prev) =>
@@ -178,9 +217,36 @@ export function TreeFormScreen({ route, navigation }: Props) {
     );
     setSpeciesName(scientificName);
     setSpeciesId(created.id);
-    setNewSpecies({ popularName: "", scientificName: "", family: "", woodDensity: "" });
+    setNewSpecies({
+      popularName: "", scientificName: "", family: "", woodDensity: "",
+      habit: "", distribution: "", endemism: "", conservationStatus: "",
+      growth: "", lifeSpan: "", dbhAmplitude: "", heightAmplitude: "",
+      epiphytes: "", herbaceousLianas: "", woodyLianas: "", grasses: "", canopyRegeneration: "",
+    });
     setShowNewSpeciesModal(false);
     setShowSpeciesModal(false);
+  };
+
+  const handleDeleteSpecies = (s: Species) => {
+    Alert.alert(
+      "Excluir espécie",
+      `Excluir "${s.scientificName}"? As árvores já cadastradas mantêm o nome digitado.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            await deleteSpecies(s.id);
+            setSpeciesList((prev) => prev.filter((x) => x.id !== s.id));
+            if (speciesId === s.id) {
+              setSpeciesId(null);
+              setSpeciesName("");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const updateStemField = (index: number, field: keyof StemInput, value: string) => {
@@ -293,7 +359,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
       <Text style={styles.label}>Nº de fustes</Text>
       <View style={styles.stemRow}>
-        {[1, 2, 3, 4, 5].map((n) => (
+        {[1, 2, 3, 4, 5, 6].map((n) => (
           <TouchableOpacity
             key={n}
             style={[styles.stemBtn, stems === n && !showCustomStemInput && styles.stemBtnActive]}
@@ -308,7 +374,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
           style={[styles.stemBtn, showCustomStemInput && styles.stemBtnActive]}
           onPress={() => setShowCustomStemInput(true)}
         >
-          <Text style={[styles.stemText, showCustomStemInput && styles.stemTextActive]}>5+</Text>
+          <Text style={[styles.stemText, showCustomStemInput && styles.stemTextActive]}>6+</Text>
         </TouchableOpacity>
       </View>
 
@@ -459,7 +525,12 @@ export function TreeFormScreen({ route, navigation }: Props) {
             data={speciesList}
             keyExtractor={(i) => String(i.id)}
             renderItem={({ item }) => (
-              <TouchableOpacity style={styles.speciesItem} onPress={() => handleSelectSpecies(item)}>
+              <TouchableOpacity
+                style={styles.speciesItem}
+                onPress={() => handleSelectSpecies(item)}
+                onLongPress={() => handleDeleteSpecies(item)}
+                delayLongPress={400}
+              >
                 <Text style={styles.speciesItemName}>{item.scientificName}</Text>
                 <Text style={styles.speciesItemPop}>
                   {item.popularName} • {item.family}
@@ -467,6 +538,9 @@ export function TreeFormScreen({ route, navigation }: Props) {
               </TouchableOpacity>
             )}
             ListEmptyComponent={<Text style={styles.emptySpecies}>Nenhuma espécie encontrada</Text>}
+            ListFooterComponent={
+              <Text style={styles.speciesHint}>Segure uma espécie para excluí-la</Text>
+            }
           />
         </View>
       </Modal>
@@ -514,6 +588,88 @@ export function TreeFormScreen({ route, navigation }: Props) {
               onChangeText={(v) => setNewSpecies((s) => ({ ...s, woodDensity: v }))}
               placeholder="Ex: 0,65"
               keyboardType="decimal-pad"
+            />
+
+            <Text style={styles.sectionLabel}>Fitossociologia</Text>
+            <ChipSelect
+              label="Hábito"
+              value={newSpecies.habit}
+              options={HABIT_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, habit: v }))}
+            />
+            <ChipSelect
+              label="Distribuição"
+              value={newSpecies.distribution}
+              options={DISTRIBUTION_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, distribution: v }))}
+            />
+            <ChipSelect
+              label="Endemismo"
+              value={newSpecies.endemism}
+              options={ENDEMISM_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, endemism: v }))}
+            />
+            <ChipSelect
+              label="Status de conservação"
+              value={newSpecies.conservationStatus}
+              options={CONSERVATION_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, conservationStatus: v }))}
+            />
+
+            <Text style={styles.sectionLabel}>Ecologia (CONAMA 05/94)</Text>
+            <ChipSelect
+              label="Crescimento das árvores"
+              value={newSpecies.growth}
+              options={GROWTH_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, growth: v }))}
+            />
+            <ChipSelect
+              label="Vida média"
+              value={newSpecies.lifeSpan}
+              options={LIFE_SPAN_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, lifeSpan: v }))}
+            />
+            <ChipSelect
+              label="Amplitude diamétrica"
+              value={newSpecies.dbhAmplitude}
+              options={AMPLITUDE_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, dbhAmplitude: v }))}
+            />
+            <ChipSelect
+              label="Amplitude de altura"
+              value={newSpecies.heightAmplitude}
+              options={AMPLITUDE_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, heightAmplitude: v }))}
+            />
+            <ChipSelect
+              label="Epífitas"
+              value={newSpecies.epiphytes}
+              options={EPIPHYTES_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, epiphytes: v }))}
+            />
+            <ChipSelect
+              label="Lianas herbáceas"
+              value={newSpecies.herbaceousLianas}
+              options={LIANAS_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, herbaceousLianas: v }))}
+            />
+            <ChipSelect
+              label="Lianas lenhosas"
+              value={newSpecies.woodyLianas}
+              options={WOODY_LIANAS_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, woodyLianas: v }))}
+            />
+            <ChipSelect
+              label="Gramíneas"
+              value={newSpecies.grasses}
+              options={GRASSES_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, grasses: v }))}
+            />
+            <ChipSelect
+              label="Regeneração do dossel"
+              value={newSpecies.canopyRegeneration}
+              options={REGENERATION_OPTIONS}
+              onChange={(v) => setNewSpecies((s) => ({ ...s, canopyRegeneration: v }))}
             />
 
             <Text style={styles.phytoHint}>
@@ -638,5 +794,44 @@ const styles = StyleSheet.create({
   },
   speciesItemName: { fontSize: 16, color: colors.text, fontStyle: "italic" },
   speciesItemPop: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+  speciesHint: { textAlign: "center", color: colors.textLight, fontSize: 12, padding: 16 },
   emptySpecies: { textAlign: "center", color: colors.textLight, marginTop: 40 },
+  sectionLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.secondary,
+    marginTop: 24,
+    marginBottom: 4,
+  },
 });
+
+function ChipSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <View>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.phytoFilterRow}>
+        {options.map((o) => (
+          <TouchableOpacity
+            key={o}
+            style={[styles.filterBtn, value === o && styles.filterBtnActive]}
+            onPress={() => onChange(value === o ? "" : o)}
+          >
+            <Text style={[styles.filterText, value === o && styles.filterTextActive]}>
+              {o}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}

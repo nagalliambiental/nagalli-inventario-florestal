@@ -11,8 +11,8 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import { listTrees, deleteTree, listStems } from "../db/database";
 import { colors } from "../constants/colors";
-import { fmtCm, fmtM, fmtM2, fmtDate } from "../utils/formats";
-import { calcPlotResults, calcShannon, calcPielou } from "../utils/calculations";
+import { fmtCm, fmtM, fmtM2, fmtM3, fmtDate } from "../utils/formats";
+import { calcPlotResults, calcShannon, calcPielou, sumTreeVolumes, treeDbhCm } from "../utils/calculations";
 import type { Tree } from "../types";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -36,6 +36,7 @@ export function PlotScreen({ route, navigation }: Props) {
   const results = calcPlotResults(trees);
   const shannon = calcShannon(trees);
   const pielou = calcPielou(trees, shannon);
+  const vols = sumTreeVolumes(trees);
 
   const handleDelete = (id: number, num: number) => {
     Alert.alert("Excluir", `Excluir árvore #${num}?`, [
@@ -51,13 +52,18 @@ export function PlotScreen({ route, navigation }: Props) {
           <MiniStat label="Árvores" value={String(trees.length)} />
           <MiniStat label="Espécies" value={String(results.speciesCount)} />
           <MiniStat label="Área basal" value={fmtM2(results.basalAreaTotal)} />
-          <MiniStat label="Volume" value={`${results.volumeTotal.toFixed(1)} m³`} />
+          <MiniStat label="Vol. comercial" value={`${results.volumeTotal.toFixed(1)} m³`} />
         </View>
         <View style={styles.row}>
           <MiniStat label="DAP médio" value={fmtCm(results.avgDbh)} />
           <MiniStat label="Altura média" value={fmtM(results.avgHeight)} />
           <MiniStat label="Shannon (H')" value={shannon.toFixed(3)} />
           <MiniStat label="Pielou (J')" value={pielou.toFixed(3)} />
+        </View>
+        <View style={styles.row}>
+          <MiniStat label="Vol. tora" value={fmtM3(vols.volumeTora)} />
+          <MiniStat label="Vol. total" value={fmtM3(vols.volumeTotal)} />
+          <MiniStat label="Vol. lenha" value={fmtM3(vols.volumeLenha)} />
         </View>
       </View>
 
@@ -78,7 +84,7 @@ export function PlotScreen({ route, navigation }: Props) {
             </View>
             <View style={styles.cardRow}>
               <Text style={styles.meta}>CAP: {fmtCm(item.capCm)}</Text>
-              <Text style={styles.meta}>DAP: {fmtCm(item.dbhCm)}</Text>
+              <Text style={styles.meta}>DAP: {fmtCm(treeDbhCm(item))}</Text>
               <Text style={styles.meta}>Alt. total: {fmtM(item.heightTotalM)}</Text>
               <Text style={styles.meta}>Fustes: {item.stemCount}</Text>
             </View>

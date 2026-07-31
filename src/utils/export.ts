@@ -1,6 +1,7 @@
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import type { Project, Plot, Tree } from "../types";
+import { treeDbhCm } from "./calculations";
 
 export async function exportXlsx(
   project: Project,
@@ -17,7 +18,7 @@ export async function exportXlsx(
       "Nº Árvore": t.number,
       Espécie: t.speciesName,
       "CAP (cm)": cap,
-      "DAP (cm)": t.dbhCm,
+      "DAP (cm)": treeDbhCm(t),
       "Altura comercial (m)": t.heightComercialM,
       "Altura total (m)": t.heightTotalM,
       "Área basal (m²)": t.basalAreaM2,
@@ -38,7 +39,7 @@ export async function exportXlsx(
         "Nº Árvore": t.number,
         Fuste: i + 1,
         "CAP (cm)": f.capCm,
-        "DAP (cm)": f.dbhCm,
+        "DAP (cm)": f.dbhCm || 0,
         "Altura comercial (m)": f.heightComercialM,
         "Altura total (m)": f.heightTotalM,
         "Área basal (m²)": f.basalAreaM2,
@@ -89,7 +90,7 @@ export async function exportKml(
         (t) => `
     <Placemark>
       <name>#${t.number} - ${t.speciesName || "N/I"}</name>
-      <description>CAP: ${t.capCm} cm, Alt total: ${t.heightTotalM} m, DAP: ${t.dbhCm} cm</description>
+      <description>CAP: ${t.capCm} cm, Alt total: ${t.heightTotalM} m, DAP: ${treeDbhCm(t)} cm</description>
       <Point><coordinates>${t.longitude},${t.latitude},0</coordinates></Point>
     </Placemark>`
       )

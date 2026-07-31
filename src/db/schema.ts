@@ -57,7 +57,20 @@ CREATE TABLE IF NOT EXISTS species (
   scientific_name TEXT NOT NULL,
   family TEXT,
   phytophysiognomy TEXT,
-  wood_density REAL DEFAULT 0
+  wood_density REAL DEFAULT 0,
+  habito TEXT DEFAULT '',
+  distribuicao TEXT DEFAULT '',
+  endemismo TEXT DEFAULT '',
+  status_conservacao TEXT DEFAULT '',
+  crescimento TEXT DEFAULT '',
+  vida_media TEXT DEFAULT '',
+  amplitude_diametrica TEXT DEFAULT '',
+  amplitude_altura TEXT DEFAULT '',
+  epifitas TEXT DEFAULT '',
+  lianas_herbaceas TEXT DEFAULT '',
+  lianas_lenhosas TEXT DEFAULT '',
+  gramineas TEXT DEFAULT '',
+  regeneracao_dossel TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_plots_project ON plots(project_id);
 CREATE INDEX IF NOT EXISTS idx_trees_plot ON trees(plot_id);

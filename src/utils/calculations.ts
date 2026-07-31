@@ -13,6 +13,21 @@ export function dbhToBasalArea(dbhCm: number): number {
   return PI * r * r;
 }
 
+/** DAP efetivo da árvore: usa o DAP informado; se ausente (multifuste ou
+ * dados de versões antigas), deriva do diâmetro equivalente da área basal
+ * ou do CAP. Evita NaN e zeros indevidos no cálculo do DAP médio. */
+export function treeDbhCm(
+  tree: Pick<Tree, "dbhCm" | "basalAreaM2" | "capCm">
+): number {
+  const dbh = Number(tree.dbhCm);
+  if (Number.isFinite(dbh) && dbh > 0) return dbh;
+  const ba = Number(tree.basalAreaM2);
+  if (Number.isFinite(ba) && ba > 0) return 200 * Math.sqrt(ba / PI);
+  const cap = Number(tree.capCm);
+  if (Number.isFinite(cap) && cap > 0) return capToDbh(cap);
+  return 0;
+}
+
 /** Process tree: compute DBH and basal area from CAP */
 export function processTree(
   capCm: number,
@@ -76,15 +91,20 @@ export function calcPlotResults(trees: Tree[]): {
   const speciesSet = new Set(
     trees.map((t) => t.speciesName).filter(Boolean)
   );
-  const basalAreaTotal = trees.reduce((s, t) => s + t.basalAreaM2, 0);
-  const volumeTotal = trees.reduce(
-    (s, t) => s + estimateVolume(t.dbhCm, t.heightComercialM),
+  const basalAreaTotal = trees.reduce(
+    (s, t) => s + (Number(t.basalAreaM2) || 0),
     0
   );
+  const volumeTotal = trees.reduce(
+    (s, t) => s + estimateVolume(treeDbhCm(t), t.heightComercialM || 0),
+    0
+  );
+  const heights = trees.map((t) => Number(t.heightTotalM) || 0);
   const avgHeight =
-    trees.reduce((s, t) => s + t.heightTotalM, 0) / trees.length;
+    heights.length > 0 ? heights.reduce((s, h) => s + h, 0) / heights.length : 0;
+  const daps = trees.map(treeDbhCm).filter((d) => d > 0);
   const avgDbh =
-    trees.reduce((s, t) => s + t.dbhCm, 0) / trees.length;
+    daps.length > 0 ? daps.reduce((s, d) => s + d, 0) / daps.length : 0;
 
   // Density (trees/ha) assuming 10,000 m² per ha
   // plot area needs to be passed in; using 1 ha placeholder
@@ -174,4 +194,99 @@ export function calcIVI(trees: Tree[]): {
       };
     })
     .sort((a, b) => b.ivi - a.ivi);
+}
+
+// ── Volumes por fator de forma (método da planilha de referência) ──
+// V tora = g × Hc × 0,7 | V total = g × Ht × 0,6 | V lenha = V total − V tora
+export const FF_VOLUME_TORA = 0.7;
+export const FF_VOLUME_TOTAL = 0.6;
+
+export interface TreeVolumes {
+  volumeTora: number;
+  volumeTotal: number;
+  volumeLenha: number;
+}
+
+export function treeVolumes(tree: Tree): TreeVolumes {
+  const fustes =
+    tree.fustes && tree.fustes.length > 0 ? tree.fustes : null;
+
+  if (fustes) {
+    let volumeTora = 0;
+    let volumeTotal = 0;
+    for (const f of fustes) {
+      if (f.heightComercialM > 0) {
+        volumeTora += f.basalAreaM2 * f.heightComercialM * FF_VOLUME_TORA;
+      }
+      if (f.heightTotalM > 0) {
+        volumeTotal += f.basalAreaM2 * f.heightTotalM * FF_VOLUME_TOTAL;
+      }
+    }
+    return {
+      volumeTora,
+      volumeTotal,
+      volumeLenha: Math.max(0, volumeTotal - volumeTora),
+    };
+  }
+
+  const volumeTora =
+    tree.heightComercialM > 0
+      ? tree.basalAreaM2 * tree.heightComercialM * FF_VOLUME_TORA
+      : 0;
+  const volumeTotal =
+    tree.heightTotalM > 0
+      ? tree.basalAreaM2 * tree.heightTotalM * FF_VOLUME_TOTAL
+      : 0;
+  return {
+    volumeTora,
+    volumeTotal,
+    volumeLenha: Math.max(0, volumeTotal - volumeTora),
+  };
+}
+
+export interface SpeciesVolumes {
+  speciesName: string;
+  n: number;
+  volumeTora: number;
+  volumeTotal: number;
+  volumeLenha: number;
+}
+
+export function calcSpeciesVolumes(trees: Tree[]): SpeciesVolumes[] {
+  const bySpecies: Record<string, SpeciesVolumes> = {};
+  trees.forEach((t) => {
+    const key = t.speciesName || "Não identificada";
+    const v = treeVolumes(t);
+    if (!bySpecies[key]) {
+      bySpecies[key] = {
+        speciesName: key,
+        n: 0,
+        volumeTora: 0,
+        volumeTotal: 0,
+        volumeLenha: 0,
+      };
+    }
+    bySpecies[key].n += 1;
+    bySpecies[key].volumeTora += v.volumeTora;
+    bySpecies[key].volumeTotal += v.volumeTotal;
+    bySpecies[key].volumeLenha += v.volumeLenha;
+  });
+  return Object.values(bySpecies).sort((a, b) => b.volumeTotal - a.volumeTotal);
+}
+
+export function sumTreeVolumes(trees: Tree[]): {
+  volumeTora: number;
+  volumeTotal: number;
+  volumeLenha: number;
+} {
+  return trees.reduce(
+    (acc, t) => {
+      const v = treeVolumes(t);
+      acc.volumeTora += v.volumeTora;
+      acc.volumeTotal += v.volumeTotal;
+      acc.volumeLenha += v.volumeLenha;
+      return acc;
+    },
+    { volumeTora: 0, volumeTotal: 0, volumeLenha: 0 }
+  );
 }

@@ -44,6 +44,17 @@ async function migrateDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
     );
   }
 
+  // Árvores de versões antigas podem estar com DAP/área basal nulos.
+  // Backfill: DAP a partir do CAP e área basal a partir do DAP.
+  await db.runAsync(
+    `UPDATE trees SET dbh_cm = cap_cm / 3.141592653589793
+     WHERE (dbh_cm IS NULL OR dbh_cm = 0) AND cap_cm > 0`
+  );
+  await db.runAsync(
+    `UPDATE trees SET basal_area_m2 = (dbh_cm * dbh_cm) * 0.000078539816
+     WHERE (basal_area_m2 IS NULL OR basal_area_m2 = 0) AND dbh_cm > 0`
+  );
+
   const stemCols = await tableColumns("stems");
   if (!stemCols.has("height_comercial_m")) {
     await db.runAsync(
@@ -54,6 +65,28 @@ async function migrateDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
     await db.runAsync(
       "ALTER TABLE stems ADD COLUMN height_total_m REAL DEFAULT 0"
     );
+  }
+
+  const speciesCols = await tableColumns("species");
+  const speciesTextCols: [string, string][] = [
+    ["habito", "habito"],
+    ["distribuicao", "distribuicao"],
+    ["endemismo", "endemismo"],
+    ["status_conservacao", "status_conservacao"],
+    ["crescimento", "crescimento"],
+    ["vida_media", "vida_media"],
+    ["amplitude_diametrica", "amplitude_diametrica"],
+    ["amplitude_altura", "amplitude_altura"],
+    ["epifitas", "epifitas"],
+    ["lianas_herbaceas", "lianas_herbaceas"],
+    ["lianas_lenhosas", "lianas_lenhosas"],
+    ["gramineas", "gramineas"],
+    ["regeneracao_dossel", "regeneracao_dossel"],
+  ];
+  for (const [col] of speciesTextCols) {
+    if (!speciesCols.has(col)) {
+      await db.runAsync(`ALTER TABLE species ADD COLUMN ${col} TEXT DEFAULT ''`);
+    }
   }
 }
 
@@ -264,6 +297,13 @@ export async function deleteStemsByTree(treeId: number): Promise<void> {
 
 // ── Species ──
 
+export async function listSpecies(): Promise<Species[]> {
+  const rows = await db.getAllAsync<any>(
+    "SELECT * FROM species ORDER BY scientific_name"
+  );
+  return rows.map(mapper.species);
+}
+
 export async function listSpeciesByPhyto(
   phytophysiognomy?: string
 ): Promise<Species[]> {
@@ -280,11 +320,23 @@ export async function insertSpecies(
   data: Omit<Species, "id">
 ): Promise<number> {
   const result = await db.runAsync(
-    `INSERT INTO species (popular_name, scientific_name, family, phytophysiognomy, wood_density)
-     VALUES (?, ?, ?, ?, ?)`,
-    [data.popularName, data.scientificName, data.family, data.phytophysiognomy, data.woodDensity]
+    `INSERT INTO species (popular_name, scientific_name, family, phytophysiognomy, wood_density,
+      habito, distribuicao, endemismo, status_conservacao,
+      crescimento, vida_media, amplitude_diametrica, amplitude_altura,
+      epifitas, lianas_herbaceas, lianas_lenhosas, gramineas, regeneracao_dossel)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      data.popularName, data.scientificName, data.family, data.phytophysiognomy, data.woodDensity,
+      data.habit, data.distribution, data.endemism, data.conservationStatus,
+      data.growth, data.lifeSpan, data.dbhAmplitude, data.heightAmplitude,
+      data.epiphytes, data.herbaceousLianas, data.woodyLianas, data.grasses, data.canopyRegeneration,
+    ]
   );
   return result.lastInsertRowId;
+}
+
+export async function deleteSpecies(id: number): Promise<void> {
+  await db.runAsync("DELETE FROM species WHERE id = ?", [id]);
 }
 
 // ── Stats ──
@@ -357,12 +409,12 @@ const mapper = {
     number: r.number,
     speciesId: r.species_id,
     speciesName: r.species_name,
-    capCm: r.cap_cm,
+    capCm: r.cap_cm ?? 0,
     heightComercialM: r.height_comercial_m ?? 0,
     heightTotalM: r.height_total_m ?? 0,
-    dbhCm: r.dbh_cm,
-    basalAreaM2: r.basal_area_m2,
-    stemCount: r.stem_count,
+    dbhCm: r.dbh_cm ?? 0,
+    basalAreaM2: r.basal_area_m2 ?? 0,
+    stemCount: r.stem_count ?? 1,
     phytosanitary: r.phytosanitary,
     photoUri: r.photo_uri,
     notes: r.notes,
@@ -375,11 +427,11 @@ const mapper = {
     id: r.id,
     treeId: r.tree_id,
     number: r.number,
-    capCm: r.cap_cm,
+    capCm: r.cap_cm ?? 0,
     heightComercialM: r.height_comercial_m ?? 0,
     heightTotalM: r.height_total_m ?? 0,
-    dbhCm: r.dbh_cm,
-    basalAreaM2: r.basal_area_m2,
+    dbhCm: r.dbh_cm ?? 0,
+    basalAreaM2: r.basal_area_m2 ?? 0,
   }),
   species: (r: any): Species => ({
     id: r.id,
@@ -388,5 +440,18 @@ const mapper = {
     family: r.family,
     phytophysiognomy: r.phytophysiognomy,
     woodDensity: r.wood_density,
+    habit: r.habito ?? "",
+    distribution: r.distribuicao ?? "",
+    endemism: r.endemismo ?? "",
+    conservationStatus: r.status_conservacao ?? "",
+    growth: r.crescimento ?? "",
+    lifeSpan: r.vida_media ?? "",
+    dbhAmplitude: r.amplitude_diametrica ?? "",
+    heightAmplitude: r.amplitude_altura ?? "",
+    epiphytes: r.epifitas ?? "",
+    herbaceousLianas: r.lianas_herbaceas ?? "",
+    woodyLianas: r.lianas_lenhosas ?? "",
+    grasses: r.gramineas ?? "",
+    canopyRegeneration: r.regeneracao_dossel ?? "",
   }),
 };

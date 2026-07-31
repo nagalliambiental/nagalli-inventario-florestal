@@ -9,10 +9,11 @@ import {
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { getProject, listPlots, deletePlot, getProjectSummary } from "../db/database";
+import { getProject, listPlots, deletePlot, getProjectSummary, listTrees } from "../db/database";
 import { colors } from "../constants/colors";
 import { fmtDate, methodLabel, fmtM2, fmtM3 } from "../utils/formats";
-import type { Plot, ProjectSummary } from "../types";
+import { sumTreeVolumes } from "../utils/calculations";
+import type { Plot, ProjectSummary, Tree } from "../types";
 import type { RootStackParamList } from "../types/navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Project">;
@@ -22,12 +23,21 @@ export function ProjectScreen({ route, navigation }: Props) {
   const [project, setProject] = useState<any>(null);
   const [plots, setPlots] = useState<Plot[]>([]);
   const [summary, setSummary] = useState<ProjectSummary | null>(null);
+  const [trees, setTrees] = useState<Tree[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       getProject(projectId).then(setProject);
       listPlots(projectId).then(setPlots);
       getProjectSummary(projectId).then(setSummary);
+      (async () => {
+        const p = await listPlots(projectId);
+        const all: Tree[] = [];
+        for (const plot of p) {
+          all.push(...(await listTrees(plot.id)));
+        }
+        setTrees(all);
+      })();
     }, [projectId])
   );
 
@@ -40,6 +50,8 @@ export function ProjectScreen({ route, navigation }: Props) {
 
   if (!project) return null;
 
+  const vols = sumTreeVolumes(trees);
+
   return (
     <View style={styles.container}>
       {summary && (
@@ -51,7 +63,11 @@ export function ProjectScreen({ route, navigation }: Props) {
           </View>
           <View style={styles.statRow}>
             <StatBox label="Área basal" value={fmtM2(summary.basalAreaTotal)} small />
-            <StatBox label="Volume" value={fmtM3(summary.volumeTotal)} small />
+            <StatBox label="Vol. total" value={fmtM3(vols.volumeTotal)} small />
+          </View>
+          <View style={styles.statRow}>
+            <StatBox label="Vol. tora" value={fmtM3(vols.volumeTora)} small />
+            <StatBox label="Vol. lenha" value={fmtM3(vols.volumeLenha)} small />
           </View>
         </View>
       )}
