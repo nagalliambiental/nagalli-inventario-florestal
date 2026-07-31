@@ -485,7 +485,11 @@ export function TreeFormScreen({ route, navigation }: Props) {
       <TextInput style={styles.input} value={notes} onChangeText={setNotes} multiline numberOfLines={3} />
 
       <Text style={styles.label}>Foto</Text>
-      <PhotoCapture onPhoto={setPhotoUri} currentUri={photoUri} />
+      <PhotoCapture
+        onPhoto={setPhotoUri}
+        currentUri={photoUri}
+        caption={`Árvore #${number || "?"}`}
+      />
 
       {latitude !== 0 && (
         <Text style={styles.coords}>

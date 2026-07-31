@@ -47,17 +47,46 @@ export async function exportXlsx(
     });
   });
 
-  const ws = XLSX.utils.json_to_sheet(treeRows);
+  const treeCols = [
+    "Parcela", "Nº Árvore", "Espécie", "CAP (cm)", "DAP (cm)",
+    "Altura comercial (m)", "Altura total (m)", "Área basal (m²)",
+    "Fustes", "Condição", "Latitude", "Longitude", "Observações",
+  ];
+  const treeSheet: (string | number)[][] = [
+    ["NAGALLI AMBIENTAL"],
+    [`Inventário Florestal — ${project.name}`],
+    [`Cliente: ${project.client || "—"} • Local: ${project.location || "—"} • Método: ${project.method}`],
+    [],
+    treeCols,
+    ...treeRows.map((r) => treeCols.map((c) => (r as any)[c] ?? "")),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(treeSheet);
+  ws["!cols"] = treeCols.map((c) => ({ wch: Math.min(34, Math.max(10, c.length + 2)) }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Árvores");
 
   if (stemRows.length > 0) {
-    const wsStems = XLSX.utils.json_to_sheet(stemRows);
+    const stemCols = [
+      "Parcela", "Nº Árvore", "Fuste", "CAP (cm)", "DAP (cm)",
+      "Altura comercial (m)", "Altura total (m)", "Área basal (m²)",
+    ];
+    const stemSheet: (string | number)[][] = [
+      ["NAGALLI AMBIENTAL"],
+      [`Inventário Florestal — ${project.name} (fustes)`],
+      [],
+      stemCols,
+      ...stemRows.map((r) => stemCols.map((c) => r[c] ?? "")),
+    ];
+    const wsStems = XLSX.utils.aoa_to_sheet(stemSheet);
+    wsStems["!cols"] = stemCols.map((c) => ({ wch: Math.min(30, Math.max(10, c.length + 2)) }));
     XLSX.utils.book_append_sheet(wb, wsStems, "Fustes");
   }
 
   // Summary sheet
   const summary = [
+    ["NAGALLI AMBIENTAL"],
+    ["Inventário Florestal"],
+    [],
     { Indicador: "Projeto", Valor: project.name },
     { Indicador: "Cliente", Valor: project.client || "" },
     { Indicador: "Localização", Valor: project.location || "" },
@@ -68,6 +97,12 @@ export async function exportXlsx(
   ];
   const wsSummary = XLSX.utils.json_to_sheet(summary);
   XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo");
+
+  wb.Props = {
+    Title: `NAGALLI AMBIENTAL — ${project.name}`,
+    Company: "Nagalli Ambiental",
+    CreatedDate: new Date(),
+  };
 
   const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
   const uri = FileSystem.documentDirectory + `${project.name.replace(/[\\/:*?"<>|]/g, "_")}.xlsx`;
@@ -83,14 +118,15 @@ export async function exportKml(
   const kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
-    <name>${project.name}</name>
+    <name>NAGALLI AMBIENTAL — ${project.name}</name>
+    <description>Inventário Florestal | ${project.client || ""} | ${project.location || ""} | Método: ${project.method}</description>
     ${trees
       .filter((t) => t.latitude !== 0 && t.longitude !== 0)
       .map(
         (t) => `
     <Placemark>
       <name>#${t.number} - ${t.speciesName || "N/I"}</name>
-      <description>CAP: ${t.capCm} cm, Alt total: ${t.heightTotalM} m, DAP: ${treeDbhCm(t)} cm</description>
+      <description>NAGALLI AMBIENTAL | CAP: ${t.capCm} cm, Alt total: ${t.heightTotalM} m, DAP: ${treeDbhCm(t)} cm</description>
       <Point><coordinates>${t.longitude},${t.latitude},0</coordinates></Point>
     </Placemark>`
       )

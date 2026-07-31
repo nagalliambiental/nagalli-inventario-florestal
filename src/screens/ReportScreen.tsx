@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Share,
   Alert,
+  Image,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
@@ -97,6 +98,7 @@ export function ReportScreen({ route }: Props) {
 
   const handleShare = async () => {
     const lines = [
+      `NAGALLI AMBIENTAL — Inventário Florestal`,
       `Projeto: ${project.name}`,
       `Cliente: ${project.client || "—"}`,
       `Local: ${project.location || "—"}`,
@@ -127,10 +129,14 @@ export function ReportScreen({ route }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.projectName}>{project.name}</Text>
-        <Text style={styles.projectMeta}>
-          {project.client} • {project.areaHa} ha
-        </Text>
+        <Image source={require("../../assets/icon.png")} style={styles.logo} />
+        <View style={styles.headerText}>
+          <Text style={styles.brand}>NAGALLI AMBIENTAL</Text>
+          <Text style={styles.projectName}>{project.name}</Text>
+          <Text style={styles.projectMeta}>
+            {project.client} • {project.areaHa} ha
+          </Text>
+        </View>
       </View>
 
       {/* General stats */}
@@ -595,8 +601,25 @@ function useStyles(colors: any) {
       StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.background },
         content: { padding: 16, paddingBottom: 40 },
-        header: { marginBottom: 20 },
-        projectName: { fontSize: 22, fontWeight: "700", color: colors.text },
+        header: {
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: 20,
+        },
+        logo: {
+          width: 48,
+          height: 48,
+          borderRadius: 10,
+          marginRight: 12,
+        },
+        headerText: { flex: 1 },
+        brand: {
+          fontSize: 13,
+          fontWeight: "800",
+          color: colors.primary,
+          letterSpacing: 1,
+        },
+        projectName: { fontSize: 20, fontWeight: "700", color: colors.text, marginTop: 2 },
         projectMeta: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
         section: {
           backgroundColor: colors.surface,
