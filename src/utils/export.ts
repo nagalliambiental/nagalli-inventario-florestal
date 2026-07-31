@@ -2,6 +2,7 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import type { Project, Plot, Tree, Species } from "../types";
 import {
+  capToDbh,
   treeDbhCm,
   treeVolumes,
   calcPlotResults,
@@ -10,6 +11,8 @@ import {
   calcIVI,
   calcSpeciesVolumes,
   sumTreeVolumes,
+  FF_VOLUME_TORA,
+  FF_VOLUME_TOTAL,
 } from "./calculations";
 import { calcDiameterDistribution } from "./diametric";
 import { calcHorizontalStructure, calcVerticalStructure } from "./structure";
@@ -247,6 +250,124 @@ export async function exportXlsx(
     appendSheet("Volumes (lenha e tora)", volRows, [24, 6, 14, 14, 14]);
   }
 
+  // ── Completa (detalhe por fuste + totais expandidos) ──
+  // Aba final pronta para anexo em relatórios de inventário florestal,
+  // no mesmo formato da planilha de referência (uma linha por fuste).
+  if (treeTrees.length > 0) {
+    const speciesById = new Map(species.map((s) => [s.id, s]));
+    const plotIndexById = new Map(plots.map((p, i) => [p.id, i + 1]));
+
+    const completaCols = [
+      "P", "Nº", "Nome científico", "Nome comum", "CAP (cm)", "DAP (cm)",
+      "Hc (m)", "Ht (m)", "Gi(m²/ha)", "VC (m³)", "VL (m³)", "Nt (un.)",
+    ];
+    const completaRows: (string | number)[][] = [];
+    const completaDaps: number[] = [];
+    let completaBa = 0;
+    let completaVc = 0;
+    let completaVl = 0;
+    let completaHtMax = 0;
+    let completaHtMin = Infinity;
+
+    const pushCompletaRow = (
+      t: Tree,
+      cap: number,
+      hc: number,
+      ht: number,
+      g: number
+    ) => {
+      const dap = capToDbh(cap);
+      const vc = hc > 0 ? g * hc * FF_VOLUME_TORA : 0;
+      const vt = ht > 0 ? g * ht * FF_VOLUME_TOTAL : 0;
+      const vl = ht > 0 ? Math.max(0, vt - vc) : 0;
+      const sp = t.speciesId ? speciesById.get(t.speciesId) : undefined;
+      completaBa += g;
+      completaVc += vc;
+      completaVl += vl;
+      completaDaps.push(dap);
+      if (ht > 0) {
+        completaHtMax = Math.max(completaHtMax, ht);
+        completaHtMin = Math.min(completaHtMin, ht);
+      }
+      completaRows.push([
+        plotIndexById.get(t.plotId) ?? "",
+        t.number,
+        t.speciesName,
+        sp?.popularName || t.speciesName,
+        cap,
+        dap,
+        hc > 0 ? hc : "",
+        ht > 0 ? ht : "",
+        g,
+        hc > 0 ? vc : "",
+        ht > 0 ? vl : "",
+        hc > 0 ? hc / 2 : "",
+      ]);
+    };
+
+    treeTrees.forEach((t) => {
+      if (t.fustes && t.fustes.length > 0) {
+        t.fustes.forEach((f) =>
+          pushCompletaRow(
+            t,
+            f.capCm,
+            f.heightComercialM,
+            f.heightTotalM,
+            f.basalAreaM2
+          )
+        );
+      } else {
+        pushCompletaRow(
+          t,
+          t.capCm,
+          t.heightComercialM,
+          t.heightTotalM,
+          t.basalAreaM2
+        );
+      }
+    });
+
+    const completaDapMedio = completaDaps.length
+      ? completaDaps.reduce((s, d) => s + d, 0) / completaDaps.length
+      : 0;
+    const completaTotal = completaVc + completaVl;
+    const factor =
+      areaHa > 0 ? (project.areaHa || 0) / areaHa : 0;
+
+    const completaRowsSheet = [
+      ["Área basal total (m²)", completaBa],
+      ["V tora total (m³)", completaVc],
+      ["V lenha total (m³)", completaVl],
+      ["DAP médio (cm)", completaDapMedio],
+      ["DAP máximo (cm)", Math.max(...completaDaps)],
+      ["DAP mínimo (cm)", Math.min(...completaDaps)],
+      ["Altura máxima (m)", completaHtMax === 0 ? 0 : completaHtMax],
+      [
+        "Altura mínima (m)",
+        completaHtMin === Infinity ? 0 : completaHtMin,
+      ],
+      [],
+      ["", "Amostral", "Total"],
+      ["Área (há)", r3(areaHa), r3(project.areaHa || 0)],
+      ["V tora (m³)", completaVc, completaVc * factor],
+      ["V lenha (m³)", completaVl, completaVl * factor],
+      ["Total (m³)", completaTotal, completaTotal * factor],
+      ["Árvores", treeTrees.length, Math.round(treeTrees.length * factor)],
+    ];
+
+    appendSheet(
+      "Completa",
+      [
+        completaCols,
+        ...completaRows,
+        [],
+        ["Resumo", ""],
+        ...completaRowsSheet,
+      ],
+      [6, 6, 24, 20, 9, 12, 9, 9, 12, 12, 12, 9]
+    );
+  }
+
   // ── Amostragem casual simples ──
   if (sampling && sampling.ba && sampling.volume) {
     const samplingRows: (string | number)[][] = [
@@ -258,7 +379,7 @@ export async function exportXlsx(
       ["Coeficiente de variação (CV%)", r2(sampling.ba.cv), r2(sampling.volume.cv)],
       ["Variância da média (Sx̄²)", r4(sampling.ba.meanVariance), r4(sampling.volume.meanVariance)],
       ["Erro padrão da média (Sx̄)", r4(sampling.ba.meanStdError), r4(sampling.volume.meanStdError)],
-      ["t de Student (95%)", r3(sampling.ba.tStudent), r3(sampling.volume.tStudent)],
+      ["t de Student (90%)", r3(sampling.ba.tStudent), r3(sampling.volume.tStudent)],
       ["Erro de amostragem absoluto (E)", r3(sampling.ba.absoluteError), r3(sampling.volume.absoluteError)],
       ["Erro de amostragem relativo (E%)", r2(sampling.ba.relativeError), r2(sampling.volume.relativeError)],
     ];
