@@ -1,11 +1,13 @@
 import * as SQLite from "expo-sqlite";
 import { CREATE_TABLES } from "./schema";
+import { deletePhotoFile } from "../utils/photos";
 import type {
   Project,
   Plot,
   Tree,
   Stem,
   Species,
+  TreePhoto,
   ProjectSummary,
 } from "../types";
 
@@ -13,6 +15,7 @@ let db: SQLite.SQLiteDatabase;
 
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   db = await SQLite.openDatabaseAsync("nagalli_inventario.db");
+  await db.execAsync("PRAGMA foreign_keys = ON;");
   await db.execAsync(CREATE_TABLES);
   await migrateDatabase(db);
   return db;
@@ -184,7 +187,7 @@ export async function getTree(id: number): Promise<Tree | null> {
   return row ? mapper.tree(row) : null;
 }
 
-export type TreePayload = Omit<Tree, "id" | "fustes" | "measuredAt"> & {
+export type TreePayload = Omit<Tree, "id" | "fustes" | "measuredAt" | "photos"> & {
   stems?: Omit<Stem, "id" | "treeId">[];
 };
 
@@ -227,7 +230,10 @@ export async function updateTree(
   if (data.basalAreaM2 !== undefined) { fields.push("basal_area_m2 = ?"); values.push(data.basalAreaM2); }
   if (data.stemCount !== undefined) { fields.push("stem_count = ?"); values.push(data.stemCount); }
   if (data.phytosanitary !== undefined) { fields.push("phytosanitary = ?"); values.push(data.phytosanitary); }
+  if (data.photoUri !== undefined) { fields.push("photo_uri = ?"); values.push(data.photoUri); }
   if (data.notes !== undefined) { fields.push("notes = ?"); values.push(data.notes); }
+  if (data.latitude !== undefined) { fields.push("latitude = ?"); values.push(data.latitude); }
+  if (data.longitude !== undefined) { fields.push("longitude = ?"); values.push(data.longitude); }
   values.push(id);
 
   await db.withTransactionAsync(async () => {
@@ -267,7 +273,15 @@ async function replaceStems(
 }
 
 export async function deleteTree(id: number): Promise<void> {
-  await db.runAsync("DELETE FROM trees WHERE id = ?", [id]);
+  const photos = await listTreePhotos(id);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync("DELETE FROM stems WHERE tree_id = ?", [id]);
+    await db.runAsync("DELETE FROM tree_photos WHERE tree_id = ?", [id]);
+    await db.runAsync("DELETE FROM trees WHERE id = ?", [id]);
+  });
+  for (const p of photos) {
+    await deletePhotoFile(p.uri);
+  }
 }
 
 // ── Stems ──
@@ -293,6 +307,39 @@ export async function createStem(
 
 export async function deleteStemsByTree(treeId: number): Promise<void> {
   await db.runAsync("DELETE FROM stems WHERE tree_id = ?", [treeId]);
+}
+
+// ── Tree photos (anexos) ──
+
+export async function listTreePhotos(treeId: number): Promise<TreePhoto[]> {
+  const rows = await db.getAllAsync<any>(
+    "SELECT * FROM tree_photos WHERE tree_id = ? ORDER BY id",
+    [treeId]
+  );
+  return rows.map(mapper.treePhoto);
+}
+
+export async function addTreePhoto(
+  treeId: number,
+  uri: string,
+  caption = ""
+): Promise<number> {
+  const result = await db.runAsync(
+    "INSERT INTO tree_photos (tree_id, uri, caption) VALUES (?, ?, ?)",
+    [treeId, uri, caption]
+  );
+  return result.lastInsertRowId;
+}
+
+export async function deleteTreePhoto(id: number): Promise<void> {
+  const rows = await db.getAllAsync<any>(
+    "SELECT uri FROM tree_photos WHERE id = ?",
+    [id]
+  );
+  await db.runAsync("DELETE FROM tree_photos WHERE id = ?", [id]);
+  if (rows.length > 0) {
+    await deletePhotoFile(rows[0].uri);
+  }
 }
 
 // ── Species ──
@@ -422,6 +469,7 @@ const mapper = {
     longitude: r.longitude,
     measuredAt: r.measured_at,
     fustes: await listStems(r.id),
+    photos: await listTreePhotos(r.id),
   }),
   stem: (r: any): Stem => ({
     id: r.id,
@@ -432,6 +480,13 @@ const mapper = {
     heightTotalM: r.height_total_m ?? 0,
     dbhCm: r.dbh_cm ?? 0,
     basalAreaM2: r.basal_area_m2 ?? 0,
+  }),
+  treePhoto: (r: any): TreePhoto => ({
+    id: r.id,
+    treeId: r.tree_id,
+    uri: r.uri,
+    caption: r.caption ?? "",
+    createdAt: r.created_at,
   }),
   species: (r: any): Species => ({
     id: r.id,

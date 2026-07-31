@@ -51,6 +51,14 @@ CREATE TABLE IF NOT EXISTS stems (
   basal_area_m2 REAL DEFAULT 0,
   FOREIGN KEY (tree_id) REFERENCES trees(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS tree_photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tree_id INTEGER NOT NULL,
+  uri TEXT NOT NULL,
+  caption TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now','localtime')),
+  FOREIGN KEY (tree_id) REFERENCES trees(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS species (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   popular_name TEXT NOT NULL,
@@ -76,4 +84,5 @@ CREATE INDEX IF NOT EXISTS idx_plots_project ON plots(project_id);
 CREATE INDEX IF NOT EXISTS idx_trees_plot ON trees(plot_id);
 CREATE INDEX IF NOT EXISTS idx_trees_species ON trees(species_id);
 CREATE INDEX IF NOT EXISTS idx_stems_tree ON stems(tree_id);
+CREATE INDEX IF NOT EXISTS idx_tree_photos_tree ON tree_photos(tree_id);
 `;

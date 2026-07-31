@@ -1,14 +1,15 @@
 import React, { useState, useRef } from "react";
-import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
 import { colors } from "../constants/colors";
 import { PhotoWatermark } from "./PhotoWatermark";
+import { persistPhoto } from "../utils/photos";
 
 interface Props {
   onPhoto: (uri: string) => void;
-  currentUri?: string;
   caption?: string;
+  buttonLabel?: string;
 }
 
 interface Pending {
@@ -20,11 +21,33 @@ interface Pending {
 
 const MAX_DIM = 1600;
 
-export function PhotoCapture({ onPhoto, currentUri, caption }: Props) {
+export function PhotoCapture({ onPhoto, caption, buttonLabel }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [showCamera, setShowCamera] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
   const cameraRef = useRef<CameraView>(null);
+
+  const finalize = async (watermarked: string | null, fallback: Pending) => {
+    let uri = fallback.uri;
+    if (watermarked) {
+      try {
+        // PNG do view-shot → JPEG compactado e persistente
+        const jpeg = await ImageManipulator.manipulateAsync(
+          watermarked,
+          [],
+          { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        uri = await persistPhoto(jpeg.uri);
+      } catch {
+        uri = await persistPhoto(watermarked);
+      }
+    } else {
+      try {
+        uri = await persistPhoto(fallback.uri);
+      } catch {}
+    }
+    onPhoto(uri);
+  };
 
   const takePhoto = async () => {
     if (!cameraRef.current) return;
@@ -33,7 +56,6 @@ export function PhotoCapture({ onPhoto, currentUri, caption }: Props) {
     setShowCamera(false);
 
     try {
-      // Redimensiona para limitar o tamanho e corrige a orientação EXIF
       let processed = await ImageManipulator.manipulateAsync(
         result.uri,
         [],
@@ -55,12 +77,13 @@ export function PhotoCapture({ onPhoto, currentUri, caption }: Props) {
           { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
         );
       }
-      setPending({
+      const pendingData: Pending = {
         uri: processed.uri,
         width: processed.width,
         height: processed.height,
         caption,
-      });
+      };
+      setPending(pendingData);
     } catch {
       onPhoto(result.uri);
     }
@@ -95,22 +118,23 @@ export function PhotoCapture({ onPhoto, currentUri, caption }: Props) {
 
       {!showCamera && (
         <TouchableOpacity style={styles.btn} onPress={() => setShowCamera(true)}>
-          <Text style={styles.btnText}>{currentUri ? "📸 Refotografar" : "📸 Fotografar"}</Text>
+          <Text style={styles.btnText}>📸 {buttonLabel || "Fotografar"}</Text>
         </TouchableOpacity>
       )}
+
       {pending && (
         <PhotoWatermark
           uri={pending.uri}
           width={pending.width}
           height={pending.height}
           caption={pending.caption}
-          onDone={(watermarked) => {
+          onDone={async (watermarked) => {
+            const snapshot = pending;
             setPending(null);
-            onPhoto(watermarked || pending.uri);
+            await finalize(watermarked, snapshot);
           }}
         />
       )}
-      {!pending && currentUri && <Image source={{ uri: currentUri }} style={styles.preview} />}
     </View>
   );
 }
@@ -148,5 +172,4 @@ const styles = StyleSheet.create({
   },
   cancelBtn: { marginTop: 12, padding: 8 },
   cancelText: { color: colors.white, fontSize: 14 },
-  preview: { width: "100%", height: 200, borderRadius: 8, marginTop: 8 },
 });

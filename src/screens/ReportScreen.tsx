@@ -521,7 +521,7 @@ export function ReportScreen({ route }: Props) {
           <>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: colors.primary }]}
-              onPress={() => exportXlsx(project, plots, trees)}
+              onPress={() => exportXlsx(project, plots, trees, species)}
             >
               <Text style={styles.actionText}>📊 Excel</Text>
             </TouchableOpacity>

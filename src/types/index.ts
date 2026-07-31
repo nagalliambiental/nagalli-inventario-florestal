@@ -45,6 +45,15 @@ export interface Tree {
   longitude: number;
   measuredAt: string;
   fustes: Stem[];
+  photos: TreePhoto[];
+}
+
+export interface TreePhoto {
+  id: number;
+  treeId: number;
+  uri: string;
+  caption: string;
+  createdAt: string;
 }
 
 export interface Stem {

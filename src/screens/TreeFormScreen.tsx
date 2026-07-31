@@ -9,10 +9,22 @@ import {
   Alert,
   Modal,
   FlatList,
+  Image,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { createTree, getTree, listTrees, updateTree, listSpeciesByPhyto, insertSpecies, deleteSpecies } from "../db/database";
+import {
+  createTree,
+  getTree,
+  listTrees,
+  updateTree,
+  listSpeciesByPhyto,
+  insertSpecies,
+  deleteSpecies,
+  addTreePhoto,
+  deleteTreePhoto,
+  listTreePhotos,
+} from "../db/database";
 import { colors } from "../constants/colors";
 import { capToDbh, dbhToBasalArea, processTree } from "../utils/calculations";
 import { phytosanitaryOptions, phytoOptions } from "../utils/formats";
@@ -66,6 +78,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
   const [phytosanitary, setPhytosanitary] = useState("");
   const [notes, setNotes] = useState("");
   const [photoUri, setPhotoUri] = useState("");
+  const [photos, setPhotos] = useState<{ id?: number; uri: string }[]>([]);
   const [latitude, setLatitude] = useState(0);
   const [longitude, setLongitude] = useState(0);
 
@@ -146,6 +159,12 @@ export function TreeFormScreen({ route, navigation }: Props) {
           }
           setPhytosanitary(t.phytosanitary || "");
           setNotes(t.notes || "");
+          setPhotoUri(t.photoUri || "");
+          const saved: { id?: number; uri: string }[] = (t.photos || []).map((p) => ({ id: p.id, uri: p.uri }));
+          if (saved.length === 0 && t.photoUri) {
+            saved.push({ uri: t.photoUri });
+          }
+          setPhotos(saved);
         }
       });
     }
@@ -282,6 +301,21 @@ export function TreeFormScreen({ route, navigation }: Props) {
       }
     }
 
+    const syncPhotos = async (treeIdNum: number) => {
+      const current = await listTreePhotos(treeIdNum);
+      const kept = new Set(photos.filter((p) => p.id != null).map((p) => p.id!));
+      for (const sp of current) {
+        if (!kept.has(sp.id)) await deleteTreePhoto(sp.id);
+      }
+      for (const p of photos) {
+        if (p.id == null) {
+          await addTreePhoto(treeIdNum, p.uri, `Árvore #${number || "?"}`);
+        }
+      }
+    };
+
+    const firstPhoto = photos[0]?.uri || photoUri;
+
     if (stems === 1) {
       const data = {
         plotId,
@@ -295,15 +329,17 @@ export function TreeFormScreen({ route, navigation }: Props) {
         basalAreaM2: ba,
         stemCount: 1,
         phytosanitary,
-        photoUri,
+        photoUri: firstPhoto,
         notes: notes.trim(),
         latitude,
         longitude,
       };
       if (isEdit) {
         await updateTree(treeId!, { ...data, stems: [] });
+        await syncPhotos(treeId!);
       } else {
-        await createTree(data);
+        const id = await createTree(data);
+        await syncPhotos(id);
       }
     } else {
       // Múltiplos fustes: agrega área basal total e usa a maior altura total como referência da árvore.
@@ -336,7 +372,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
         basalAreaM2: totalBa,
         stemCount: stems,
         phytosanitary,
-        photoUri,
+        photoUri: firstPhoto,
         notes: notes.trim(),
         latitude,
         longitude,
@@ -344,8 +380,10 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
       if (isEdit) {
         await updateTree(treeId!, { ...data, stems: parsedStems });
+        await syncPhotos(treeId!);
       } else {
-        await createTree({ ...data, stems: parsedStems });
+        const id = await createTree({ ...data, stems: parsedStems });
+        await syncPhotos(id);
       }
     }
 
@@ -484,12 +522,32 @@ export function TreeFormScreen({ route, navigation }: Props) {
       <Text style={styles.label}>Observações</Text>
       <TextInput style={styles.input} value={notes} onChangeText={setNotes} multiline numberOfLines={3} />
 
-      <Text style={styles.label}>Foto</Text>
+      <Text style={styles.label}>Fotos / Anexos</Text>
+      {photos.length > 0 && (
+        <View style={styles.photoGrid}>
+          {photos.map((p, i) => (
+            <View key={p.id ?? `new-${i}`} style={styles.photoItem}>
+              <Image source={{ uri: p.uri }} style={styles.photoThumb} />
+              <TouchableOpacity
+                style={styles.photoRemove}
+                onPress={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+              >
+                <Text style={styles.photoRemoveText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
       <PhotoCapture
-        onPhoto={setPhotoUri}
-        currentUri={photoUri}
+        onPhoto={(uri) => setPhotos((prev) => [...prev, { uri }])}
         caption={`Árvore #${number || "?"}`}
+        buttonLabel={photos.length > 0 ? "Adicionar outra foto" : "Fotografar"}
       />
+      {photos.length > 0 && (
+        <Text style={styles.photoHint}>
+          As fotos ficam salvas no banco do aparelho. Toque em ✕ para remover.
+        </Text>
+      )}
 
       {latitude !== 0 && (
         <Text style={styles.coords}>
@@ -705,6 +763,22 @@ const styles = StyleSheet.create({
   },
   computed: { fontSize: 13, color: colors.primary, marginTop: 4, fontWeight: "500" },
   coords: { fontSize: 13, color: colors.textSecondary, marginTop: 8, textAlign: "center" },
+  photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
+  photoItem: { position: "relative" },
+  photoThumb: { width: 96, height: 96, borderRadius: 8 },
+  photoRemove: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.error,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoRemoveText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  photoHint: { fontSize: 12, color: colors.textSecondary, marginTop: 6, marginBottom: 8 },
   stemRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   stemBtn: {
     width: 44,
