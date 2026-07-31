@@ -192,11 +192,13 @@ export function ReportScreen({ route }: Props) {
         <Section styles={styles} title="Amostragem casual simples (parcelas fixas)">
           <Text style={styles.samplingHint}>
             Valores por parcela (n = {sampling.n}, área média de{" "}
-            {sampling.meanPlotAreaM2.toFixed(0)} m²
+            {sampling.meanPlotAreaM2.toFixed(0)} m², área total amostrada de{" "}
+            {sampling.totalAreaM2.toFixed(0)} m²
             {sampling.totalPlots
               ? `, população estimada de ${sampling.totalPlots} parcelas`
               : ", população considerada infinita"}
-            ), expressos por hectare.
+            ). Área basal em m² e volume em m³ por parcela, média das somas de
+            cada parcela.
           </Text>
 
           <View style={styles.samplingHeader}>
@@ -301,8 +303,7 @@ export function ReportScreen({ route }: Props) {
         {diametric ? (
           <>
             <Text style={styles.samplingHint}>
-              Regra de Sturges: {diametric.classCount} classes (IC ={" "}
-              {diametric.classWidth.toFixed(1)} cm) • área amostrada ={" "}
+              Classes fixas de 5 cm (5–10, 10–15, 15–20, ...) • área amostrada ={" "}
               {diametric.areaHa.toFixed(3)} ha
             </Text>
             <View style={styles.volHeader}>

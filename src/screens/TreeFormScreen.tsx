@@ -116,8 +116,14 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
   const stems = parseInt(stemCount) || 1;
 
+  // Aceita vírgula como separador decimal (padrão pt-BR)
+  const parseDecimal = (value: string): number => {
+    const n = parseFloat((value || "").replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  };
+
   // Computed (fuste único)
-  const cap = parseFloat(capCm) || 0;
+  const cap = parseDecimal(capCm);
   const dbh = capToDbh(cap);
   const ba = dbhToBasalArea(dbh);
 
@@ -290,6 +296,14 @@ export function TreeFormScreen({ route, navigation }: Props) {
     );
   };
 
+  const handlePhytosanitaryChange = (opt: string) => {
+    setPhytosanitary(opt);
+    if (opt === "Morta") {
+      setSpeciesName("Morta");
+      setSpeciesId(null);
+    }
+  };
+
   const updateStemField = (index: number, field: keyof StemInput, value: string) => {
     setStemsData((prev) => {
       const copy = [...prev];
@@ -345,7 +359,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
           return;
         }
       } else {
-        const invalido = stemsData.some((s) => !s.capCm || parseFloat(s.capCm) <= 0);
+        const invalido = stemsData.some((s) => !s.capCm || parseDecimal(s.capCm) <= 0);
         if (invalido) {
           Alert.alert("Preencha o CAP de todos os fustes");
           return;
@@ -400,15 +414,16 @@ export function TreeFormScreen({ route, navigation }: Props) {
         await syncPhotos(id);
       }
     } else if (stems === 1) {
+      const dead = phytosanitary === "Morta";
       const data = {
         plotId,
         number: parseInt(number) || 1,
-        speciesId,
-        speciesName,
+        speciesId: dead ? null : speciesId,
+        speciesName: dead ? "Morta" : speciesName,
         isTree,
         capCm: cap,
-        heightComercialM: parseFloat(heightComercialM) || 0,
-        heightTotalM: parseFloat(heightTotalM) || 0,
+        heightComercialM: parseDecimal(heightComercialM),
+        heightTotalM: parseDecimal(heightTotalM),
         dbhCm: dbh,
         basalAreaM2: ba,
         stemCount: 1,
@@ -428,7 +443,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
     } else {
       // Múltiplos fustes: agrega área basal total e usa a maior altura total como referência da árvore.
       const parsedStems = stemsData.map((s, i) => {
-        const stemCap = parseFloat(s.capCm) || 0;
+        const stemCap = parseDecimal(s.capCm);
         const stemDbh = capToDbh(stemCap);
         const stemBa = dbhToBasalArea(stemDbh);
         return {
@@ -436,19 +451,20 @@ export function TreeFormScreen({ route, navigation }: Props) {
           capCm: stemCap,
           dbhCm: stemDbh,
           basalAreaM2: stemBa,
-          heightComercialM: parseFloat(s.heightComercialM) || 0,
-          heightTotalM: parseFloat(s.heightTotalM) || 0,
+          heightComercialM: parseDecimal(s.heightComercialM),
+          heightTotalM: parseDecimal(s.heightTotalM),
         };
       });
       const totalBa = parsedStems.reduce((sum, s) => sum + s.basalAreaM2, 0);
       const maxHeightTotal = Math.max(...parsedStems.map((s) => s.heightTotalM));
       const maxHeightComercial = Math.max(...parsedStems.map((s) => s.heightComercialM));
+      const dead = phytosanitary === "Morta";
 
       const data = {
         plotId,
         number: parseInt(number) || 1,
-        speciesId,
-        speciesName,
+        speciesId: dead ? null : speciesId,
+        speciesName: dead ? "Morta" : speciesName,
         isTree,
         capCm: 0, // não se aplica em árvore multifuste — CAP fica por fuste
         heightComercialM: maxHeightComercial,
@@ -577,7 +593,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
         </>
       ) : (
         stemsData.map((stem, i) => {
-          const stemCap = parseFloat(stem.capCm) || 0;
+          const stemCap = parseDecimal(stem.capCm);
           const stemDbh = capToDbh(stemCap);
           const stemBa = dbhToBasalArea(stemDbh);
           return (
@@ -679,12 +695,17 @@ export function TreeFormScreen({ route, navigation }: Props) {
               <TouchableOpacity
                 key={opt}
                 style={[styles.phytoBtn, phytosanitary === opt && styles.phytoBtnActive]}
-                onPress={() => setPhytosanitary(opt)}
+                onPress={() => handlePhytosanitaryChange(opt)}
               >
                 <Text style={[styles.phytoText, phytosanitary === opt && styles.phytoTextActive]}>{opt}</Text>
               </TouchableOpacity>
             ))}
           </View>
+          {phytosanitary === "Morta" && (
+            <Text style={styles.photoHint}>
+              Espécie será registrada como "Morta" no levantamento florístico.
+            </Text>
+          )}
         </>
       )}
 

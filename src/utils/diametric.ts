@@ -1,7 +1,10 @@
-// Distribuição diamétrica — regra de Sturges (número de classes)
-// e diâmetro equivalente (Deq = √(Σ d² / n)).
+// Distribuição diamétrica — classes fixas de 5 cm (5–10, 10–15, 15–20, ...).
+// Deq da árvore (incluindo todos os fustes): Deq = √(Σ dap²)
+// O valor aplicado na distribuição é a média dos Deqs de todas as árvores.
 import type { Tree } from "../types";
 import { treeDbhCm } from "./calculations";
+
+export const CLASS_WIDTH = 5;
 
 export interface DiameterClass {
   lower: number;
@@ -26,36 +29,36 @@ export function calcDiameterDistribution(
   trees: Tree[],
   areaHa = 1
 ): DiametricResult | null {
-  const daps = trees.map((t) => treeDbhCm(t)).filter((d) => d > 0);
-  if (daps.length === 0) return null;
+  // treeDbhCm já retorna o Deq da árvore: para multifuste, √(Σ dap² dos fustes);
+  // para fuste único, o próprio DAP.
+  const deqs = trees.map((t) => treeDbhCm(t)).filter((d) => d > 0);
+  if (deqs.length === 0) return null;
 
-  const n = daps.length;
-  const minDap = Math.min(...daps);
-  const maxDap = Math.max(...daps);
+  const n = deqs.length;
+  const minDap = Math.min(...deqs);
+  const maxDap = Math.max(...deqs);
 
-  // Sturges: NC = 1 + 3,322 * log10(n)
-  const classCount = Math.max(1, Math.round(1 + 3.322 * Math.log10(n)));
-  const amplitude = maxDap - minDap;
-  const classWidth = amplitude > 0 ? amplitude / classCount : 1;
+  const firstLower = Math.floor(minDap / CLASS_WIDTH) * CLASS_WIDTH;
+  const lastUpper = Math.ceil(maxDap / CLASS_WIDTH) * CLASS_WIDTH;
 
   const classes: DiameterClass[] = [];
-  for (let i = 0; i < classCount; i++) {
-    const lower = minDap + i * classWidth;
-    const upper = minDap + (i + 1) * classWidth;
-    const count = daps.filter((d) =>
-      i === classCount - 1 ? d >= lower && d <= upper : d >= lower && d < upper
+  for (let lower = firstLower; lower < lastUpper; lower += CLASS_WIDTH) {
+    const upper = lower + CLASS_WIDTH;
+    const count = deqs.filter((d) =>
+      upper >= lastUpper ? d >= lower && d <= upper : d >= lower && d < upper
     ).length;
     classes.push({ lower, upper, count, freqPerHa: count / areaHa });
   }
 
-  const deq = Math.sqrt(daps.reduce((s, d) => s + d * d, 0) / n);
+  // Média dos Deqs de todas as árvores
+  const deq = deqs.reduce((s, d) => s + d, 0) / n;
 
   return {
     n,
     minDap,
     maxDap,
-    classCount,
-    classWidth,
+    classCount: classes.length,
+    classWidth: CLASS_WIDTH,
     classes,
     deq,
     totalFreqPerHa: n / areaHa,

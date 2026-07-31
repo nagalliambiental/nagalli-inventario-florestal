@@ -30,7 +30,7 @@ export function PlotFormScreen({ route, navigation }: Props) {
     await createPlot({
       projectId,
       code: code.trim(),
-      areaM2: parseFloat(areaM2) || 0,
+      areaM2: parseFloat((areaM2 || "").replace(",", ".")) || 0,
       shape: shape.trim(),
       coordinates: "",
       notes: notes.trim(),

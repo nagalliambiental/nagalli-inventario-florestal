@@ -51,7 +51,7 @@ export function ProjectFormScreen({ route, navigation }: Props) {
       client: client.trim(),
       location: location.trim(),
       method,
-      areaHa: parseFloat(areaHa) || 0,
+      areaHa: parseFloat((areaHa || "").replace(",", ".")) || 0,
     };
     if (isEdit) {
       await updateProject(projectId!, data);

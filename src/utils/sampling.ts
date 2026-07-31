@@ -35,7 +35,7 @@ export function tCritical(df: number): number {
 
 /**
  * Calcula a tabela de amostragem casual simples para um vetor de valores
- * por parcela (ex.: área basal m²/ha ou volume m³/ha).
+ * por parcela (ex.: área basal em m² ou volume em m³ por parcela).
  *
  * @param values     valores da variável em cada parcela
  * @param totalPlots tamanho da população (N = nº possível de parcelas);
@@ -100,14 +100,16 @@ export interface SamplingReport {
   n: number;
   totalPlots: number | null;
   meanPlotAreaM2: number;
+  totalAreaM2: number;
   ba: SimpleRandomSamplingResult | null;
   volume: SimpleRandomSamplingResult | null;
 }
 
 /**
- * Monta os valores por parcela (área basal e volume por hectare) e calcula
- * a tabela de amostragem casual simples para o método "parcelas fixas".
- * Parcelas sem área cadastrada são consideradas com 1 ha (10.000 m²).
+ * Monta os valores por parcela (área basal em m² e volume em m³ por parcela)
+ * e calcula a tabela de amostragem casual simples para o método "parcelas fixas".
+ * A média é a média das somas por parcela. Parcelas sem área cadastrada são
+ * consideradas com 1 ha (10.000 m²).
  */
 export function buildSamplingReport(
   project: Project,
@@ -116,28 +118,34 @@ export function buildSamplingReport(
 ): SamplingReport {
   const n = plots.length;
   if (n < 2) {
-    return { n, totalPlots: null, meanPlotAreaM2: 0, ba: null, volume: null };
+    return {
+      n,
+      totalPlots: null,
+      meanPlotAreaM2: 0,
+      totalAreaM2: 0,
+      ba: null,
+      volume: null,
+    };
   }
 
-  const baPerHa: number[] = [];
-  const volPerHa: number[] = [];
-  let meanArea = 0;
+  const baValues: number[] = [];
+  const volValues: number[] = [];
+  let totalArea = 0;
 
   for (const plot of plots) {
     const plotTrees = trees.filter((t) => t.plotId === plot.id);
     const areaM2 = plot.areaM2 > 0 ? plot.areaM2 : 10000;
-    const areaHa = areaM2 / 10000;
-    meanArea += areaM2;
+    totalArea += areaM2;
 
     const ba = plotTrees.reduce((s, t) => s + (t.basalAreaM2 || 0), 0);
     const vol = plotTrees.reduce(
       (s, t) => s + estimateVolume(treeDbhCm(t), t.heightComercialM),
       0
     );
-    baPerHa.push(ba / areaHa);
-    volPerHa.push(vol / areaHa);
+    baValues.push(ba);
+    volValues.push(vol);
   }
-  meanArea /= n;
+  const meanArea = totalArea / n;
 
   let totalPlots: number | null = null;
   if (project.areaHa > 0 && meanArea > 0) {
@@ -148,7 +156,8 @@ export function buildSamplingReport(
     n,
     totalPlots,
     meanPlotAreaM2: meanArea,
-    ba: calcSimpleRandomSampling(baPerHa, totalPlots),
-    volume: calcSimpleRandomSampling(volPerHa, totalPlots),
+    totalAreaM2: totalArea,
+    ba: calcSimpleRandomSampling(baValues, totalPlots),
+    volume: calcSimpleRandomSampling(volValues, totalPlots),
   };
 }

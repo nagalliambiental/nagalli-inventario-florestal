@@ -199,7 +199,7 @@ export async function exportXlsx(
   if (diametric) {
     const diamRows: (string | number)[][] = [
       [
-        `Regra de Sturges: ${diametric.classCount} classes (IC = ${r2(diametric.classWidth)} cm) • área amostrada = ${r3(diametric.areaHa)} ha`,
+        `Classes fixas de 5 cm (5–10, 10–15, 15–20, ...) • área amostrada = ${r3(diametric.areaHa)} ha`,
       ],
       [],
       ["Classe DAP (cm)", "N", "Freq/ha"],
@@ -262,7 +262,7 @@ export async function exportXlsx(
       ["Erro de amostragem absoluto (E)", r3(sampling.ba.absoluteError), r3(sampling.volume.absoluteError)],
       ["Erro de amostragem relativo (E%)", r2(sampling.ba.relativeError), r2(sampling.volume.relativeError)],
     ];
-    const note = `Amostragem casual simples (parcelas fixas) • n = ${sampling.n}, área média da parcela = ${sampling.meanPlotAreaM2.toFixed(0)} m²${sampling.totalPlots ? `, população estimada = ${sampling.totalPlots} parcelas` : ", população considerada infinita"} • valores expressos por hectare.`;
+    const note = `Amostragem casual simples (parcelas fixas) • n = ${sampling.n}, área média da parcela = ${sampling.meanPlotAreaM2.toFixed(0)} m², área total amostrada = ${sampling.totalAreaM2.toFixed(0)} m² (n × área da parcela)${sampling.totalPlots ? `, população estimada = ${sampling.totalPlots} parcelas` : ", população considerada infinita"} • área basal em m² e volume em m³ por parcela (média das somas de cada parcela).`;
     appendSheet(
       "Amostragem",
       [[note], [], ...samplingRows],
