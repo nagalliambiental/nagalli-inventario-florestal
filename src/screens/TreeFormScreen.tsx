@@ -19,6 +19,8 @@ import {
   listTrees,
   updateTree,
   listSpeciesByPhyto,
+  listSpecies,
+  getSpecies,
   insertSpecies,
   deleteSpecies,
   addTreePhoto,
@@ -150,6 +152,20 @@ export function TreeFormScreen({ route, navigation }: Props) {
           setHeightTotalM(String(t.heightTotalM ?? ""));
           setSpeciesName(t.speciesName || "");
           setSpeciesId(t.speciesId);
+          if (t.speciesId) {
+            getSpecies(t.speciesId).then((sp) => {
+              if (sp) {
+                setNewSpecies((s) => ({
+                  ...s,
+                  scientificName: sp.scientificName,
+                  popularName: sp.popularName,
+                  habit: sp.habit,
+                  endemism: sp.endemism,
+                  distribution: sp.distribution,
+                }));
+              }
+            });
+          }
           setStemCount(String(t.stemCount));
           if (t.fustes && t.fustes.length > 0) {
             setStemsData(
@@ -293,6 +309,34 @@ export function TreeFormScreen({ route, navigation }: Props) {
     if (!isNaN(n) && n > 0) setStemCount(String(n));
   };
 
+  const findOrCreateSpecies = async (scientificName: string) => {
+    const norm = scientificName.trim().toLowerCase();
+    const found =
+      [...speciesList].find((s) => s.scientificName.toLowerCase() === norm) ||
+      (await listSpecies()).find((s) => s.scientificName.toLowerCase() === norm);
+    if (found) return found.id;
+    return insertSpecies({
+      popularName: newSpecies.popularName.trim(),
+      scientificName: scientificName.trim(),
+      family: "",
+      phytophysiognomy: phytoFilter,
+      woodDensity: 0,
+      habit: newSpecies.habit,
+      distribution: newSpecies.distribution,
+      endemism: newSpecies.endemism,
+      conservationStatus: "",
+      growth: "",
+      lifeSpan: "",
+      dbhAmplitude: "",
+      heightAmplitude: "",
+      epiphytes: "",
+      herbaceousLianas: "",
+      woodyLianas: "",
+      grasses: "",
+      canopyRegeneration: "",
+    });
+  };
+
   const handleSave = async () => {
     if (isTree) {
       if (stems === 1) {
@@ -307,6 +351,9 @@ export function TreeFormScreen({ route, navigation }: Props) {
           return;
         }
       }
+    } else if (!newSpecies.scientificName.trim()) {
+      Alert.alert("Nome científico obrigatório", "Informe a espécie do indivíduo não-árvore.");
+      return;
     }
 
     const syncPhotos = async (treeIdNum: number) => {
@@ -324,7 +371,35 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
     const firstPhoto = photos[0]?.uri || photoUri;
 
-    if (stems === 1) {
+    if (!isTree) {
+      const scientificName = newSpecies.scientificName.trim();
+      const spId = await findOrCreateSpecies(scientificName);
+      const data = {
+        plotId,
+        number: parseInt(number) || 1,
+        speciesId: spId,
+        speciesName: scientificName,
+        isTree: false,
+        capCm: 0,
+        heightComercialM: 0,
+        heightTotalM: 0,
+        dbhCm: 0,
+        basalAreaM2: 0,
+        stemCount: 1,
+        phytosanitary: "",
+        photoUri: firstPhoto,
+        notes: notes.trim(),
+        latitude,
+        longitude,
+      };
+      if (isEdit) {
+        await updateTree(treeId!, { ...data, stems: [] });
+        await syncPhotos(treeId!);
+      } else {
+        const id = await createTree({ ...data, stems: [] });
+        await syncPhotos(id);
+      }
+    } else if (stems === 1) {
       const data = {
         plotId,
         number: parseInt(number) || 1,
@@ -402,37 +477,42 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.label}>Nº da árvore</Text>
+      <Text style={styles.label}>Nº do {isTree ? "árvore" : "indivíduo"}</Text>
       <TextInput style={styles.input} value={number} onChangeText={setNumber} keyboardType="number-pad" />
 
       <Text style={styles.label}>Tipo de indivíduo</Text>
-      <View style={styles.stemRow}>
+      <View style={styles.typeRow}>
         <TouchableOpacity
-          style={[styles.stemBtn, isTree && styles.stemBtnActive]}
+          style={[styles.typeBtn, isTree && styles.typeBtnActive]}
           onPress={() => setIsTree(true)}
         >
-          <Text style={[styles.stemText, isTree && styles.stemTextActive]}>
-            🌳 Árvore
-          </Text>
+          <Text style={styles.typeBtnEmoji}>🌳</Text>
+          <View style={styles.typeBtnTexts}>
+            <Text style={[styles.typeText, isTree && styles.typeTextActive]}>Árvore</Text>
+            <Text style={[styles.typeDesc, isTree && styles.typeDescActive]}>
+              Medição completa: CAP, fustes e alturas
+            </Text>
+          </View>
+          {isTree && <Text style={styles.typeCheck}>✓</Text>}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.stemBtn, !isTree && styles.stemBtnActive]}
+          style={[styles.typeBtn, !isTree && styles.typeBtnActive]}
           onPress={() => setIsTree(false)}
         >
-          <Text style={[styles.stemText, !isTree && styles.stemTextActive]}>
-            🌿 Não-árvore
-          </Text>
+          <Text style={styles.typeBtnEmoji}>🌿</Text>
+          <View style={styles.typeBtnTexts}>
+            <Text style={[styles.typeText, !isTree && styles.typeTextActive]}>Não-árvore</Text>
+            <Text style={[styles.typeDesc, !isTree && styles.typeDescActive]}>
+              Erva, liana ou arbusto — registra só a espécie, sem medições
+            </Text>
+          </View>
+          {!isTree && <Text style={styles.typeCheck}>✓</Text>}
         </TouchableOpacity>
       </View>
-      {!isTree && (
-        <Text style={styles.photoHint}>
-          Erva, liana, arbusto ou outro não arbóreo: não entra na distribuição
-          diamétrica nem nos demais relatórios florestais — apenas no
-          levantamento florístico.
-        </Text>
-      )}
 
-      <Text style={styles.label}>Nº de fustes</Text>
+      {isTree ? (
+        <>
+          <Text style={styles.label}>Nº de fustes</Text>
       <View style={styles.stemRow}>
         {[1, 2, 3, 4, 5, 6].map((n) => (
           <TouchableOpacity
@@ -535,26 +615,78 @@ export function TreeFormScreen({ route, navigation }: Props) {
           );
         })
       )}
+        </>
+      ) : (
+        <>
+          <Text style={styles.sectionLabel}>Registro da espécie (não-árvore)</Text>
+          <Text style={styles.photoHint}>
+            Erva, liana, arbusto ou outro não arbóreo: registra a espécie com hábito,
+            endemismo e distribuição. Não entra nos relatórios florestais — apenas
+            no levantamento florístico.
+          </Text>
 
-      <Text style={styles.label}>Espécie</Text>
-      <TouchableOpacity style={styles.speciesBtn} onPress={() => setShowSpeciesModal(true)}>
-        <Text style={speciesName ? styles.speciesText : styles.placeholder}>
-          {speciesName || "Selecionar espécie..."}
-        </Text>
-      </TouchableOpacity>
+          <Text style={styles.label}>Nome científico *</Text>
+          <TextInput
+            style={styles.input}
+            value={newSpecies.scientificName}
+            onChangeText={(v) => setNewSpecies((s) => ({ ...s, scientificName: v }))}
+            placeholder="Ex: Paspalum notatum"
+            autoCapitalize="words"
+          />
 
-      <Text style={styles.label}>Condição fitossanitária</Text>
-      <View style={styles.phytoRow}>
-        {phytosanitaryOptions.map((opt) => (
-          <TouchableOpacity
-            key={opt}
-            style={[styles.phytoBtn, phytosanitary === opt && styles.phytoBtnActive]}
-            onPress={() => setPhytosanitary(opt)}
-          >
-            <Text style={[styles.phytoText, phytosanitary === opt && styles.phytoTextActive]}>{opt}</Text>
+          <Text style={styles.label}>Nome popular</Text>
+          <TextInput
+            style={styles.input}
+            value={newSpecies.popularName}
+            onChangeText={(v) => setNewSpecies((s) => ({ ...s, popularName: v }))}
+            placeholder="Ex: Grama-batatais"
+            autoCapitalize="words"
+          />
+
+          <ChipSelect
+            label="Hábito"
+            value={newSpecies.habit}
+            options={HABIT_OPTIONS}
+            onChange={(v) => setNewSpecies((s) => ({ ...s, habit: v }))}
+          />
+          <ChipSelect
+            label="Endemismo"
+            value={newSpecies.endemism}
+            options={ENDEMISM_OPTIONS}
+            onChange={(v) => setNewSpecies((s) => ({ ...s, endemism: v }))}
+          />
+          <ChipSelect
+            label="Distribuição"
+            value={newSpecies.distribution}
+            options={DISTRIBUTION_OPTIONS}
+            onChange={(v) => setNewSpecies((s) => ({ ...s, distribution: v }))}
+          />
+        </>
+      )}
+
+      {isTree && (
+        <>
+          <Text style={styles.label}>Espécie</Text>
+          <TouchableOpacity style={styles.speciesBtn} onPress={() => setShowSpeciesModal(true)}>
+            <Text style={speciesName ? styles.speciesText : styles.placeholder}>
+              {speciesName || "Selecionar espécie..."}
+            </Text>
           </TouchableOpacity>
-        ))}
-      </View>
+
+          <Text style={styles.label}>Condição fitossanitária</Text>
+          <View style={styles.phytoRow}>
+            {phytosanitaryOptions.map((opt) => (
+              <TouchableOpacity
+                key={opt}
+                style={[styles.phytoBtn, phytosanitary === opt && styles.phytoBtnActive]}
+                onPress={() => setPhytosanitary(opt)}
+              >
+                <Text style={[styles.phytoText, phytosanitary === opt && styles.phytoTextActive]}>{opt}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
 
       <Text style={styles.label}>Observações</Text>
       <TextInput style={styles.input} value={notes} onChangeText={setNotes} multiline numberOfLines={3} />
@@ -819,6 +951,26 @@ const styles = StyleSheet.create({
   },
   photoRemoveText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   photoHint: { fontSize: 12, color: colors.textSecondary, marginTop: 6, marginBottom: 8 },
+  typeRow: { gap: 10 },
+  typeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  typeBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  typeBtnEmoji: { fontSize: 22 },
+  typeBtnTexts: { flex: 1 },
+  typeText: { fontSize: 16, fontWeight: "700", color: colors.text },
+  typeTextActive: { color: colors.white },
+  typeDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  typeDescActive: { color: "rgba(255,255,255,0.85)" },
+  typeCheck: { fontSize: 16, color: colors.white, fontWeight: "800" },
   stemRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   stemBtn: {
     width: 44,

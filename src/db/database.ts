@@ -381,6 +381,14 @@ export async function listSpeciesByPhyto(
   return rows.map(mapper.species);
 }
 
+export async function getSpecies(id: number): Promise<Species | null> {
+  const row = await db.getFirstAsync<any>(
+    "SELECT * FROM species WHERE id = ?",
+    [id]
+  );
+  return row ? mapper.species(row) : null;
+}
+
 export async function insertSpecies(
   data: Omit<Species, "id">
 ): Promise<number> {
