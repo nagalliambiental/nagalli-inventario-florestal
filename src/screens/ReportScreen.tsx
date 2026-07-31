@@ -24,7 +24,7 @@ import { fmtCm, fmtM, fmtM2, fmtM3, fmtPct } from "../utils/formats";
 import { useMemo } from "react";
 import { calcSufficiency } from "../utils/sufficiency";
 import { buildSamplingReport } from "../utils/sampling";
-import { exportXlsx, exportKml } from "../utils/export";
+import { exportXlsx, exportKml, exportProjectImages } from "../utils/export";
 import { useTheme } from "../contexts/ThemeContext";
 import { calcDiameterDistribution } from "../utils/diametric";
 import {
@@ -530,6 +530,20 @@ export function ReportScreen({ route }: Props) {
               onPress={() => exportKml(project, plots, trees)}
             >
               <Text style={styles.actionText}>🗺️ KML</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: colors.primaryLight }]}
+              onPress={async () => {
+                const ok = await exportProjectImages(project, plots, trees);
+                if (!ok) {
+                  Alert.alert(
+                    "Sem fotos",
+                    "Nenhuma foto cadastrada neste projeto."
+                  );
+                }
+              }}
+            >
+              <Text style={styles.actionText}>📷 Imagens</Text>
             </TouchableOpacity>
           </>
         )}

@@ -28,6 +28,22 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
+const ACCENTS: Record<string, string> = {
+  Á: "A", À: "A", Â: "A", Ã: "A", Ä: "A", É: "E", È: "E", Ê: "E",
+  Í: "I", Ì: "I", Î: "I", Ó: "O", Ò: "O", Ô: "O", Õ: "O", Ö: "O",
+  Ú: "U", Ù: "U", Û: "U", Ü: "U", Ç: "C", Ñ: "N",
+};
+
+function sanitizeFileName(name: string): string {
+  return name
+    .toUpperCase()
+    .split("")
+    .map((c) => ACCENTS[c] || c)
+    .join("")
+    .replace(/[^A-Z0-9_-]/g, "_")
+    .replace(/_+/g, "_");
+}
+
 export async function exportXlsx(
   project: Project,
   plots: Plot[],
@@ -371,6 +387,79 @@ export async function exportXlsx(
     mimeType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
+}
+
+// Exporta as fotos do projeto em um arquivo ZIP, nomeadas como
+// PROJETO_PARCELA_NUMEROARVORE (ex.: FAZENDA_X_P01_001.jpg). Retorna false
+// quando o projeto não tem nenhuma foto cadastrada.
+export async function exportProjectImages(
+  project: Project,
+  plots: Plot[],
+  trees: Tree[]
+): Promise<boolean> {
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+
+  const plotByTree: Record<number, Plot> = {};
+  plots.forEach((p) => {
+    plotByTree[p.id] = p;
+  });
+
+  const projectName = sanitizeFileName(project.name);
+  const readme: string[] = [
+    "NAGALLI AMBIENTAL — INVENTÁRIO FLORESTAL",
+    "",
+    `Projeto: ${project.name}`,
+    `Cliente: ${project.client || "—"}`,
+    `Local: ${project.location || "—"}`,
+    "",
+    "Fotos: PROJETO_PARCELA_NUMEROARVORE",
+    "",
+  ];
+
+  let total = 0;
+  for (const t of trees) {
+    const plotCode = sanitizeFileName(plotByTree[t.plotId]?.code || `P${t.plotId}`);
+    const photoUris: string[] = [];
+    if (t.photos && t.photos.length > 0) {
+      photoUris.push(...t.photos.map((p) => p.uri));
+    } else if (t.photoUri) {
+      photoUris.push(t.photoUri);
+    }
+    const base = `${projectName}_${plotCode}_${String(t.number).padStart(3, "0")}`;
+    for (let i = 0; i < photoUris.length; i++) {
+      const uri = photoUris[i];
+      const ext = uri.toLowerCase().endsWith(".png") ? "png" : "jpg";
+      const name = `${base}${photoUris.length > 1 ? `_${i + 1}` : ""}.${ext}`;
+      try {
+        const b64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        zip.file(name, b64, { base64: true });
+        readme.push(
+          `${name}  →  Árvore #${t.number} — ${t.speciesName || "N/I"} (Parcela ${plotByTree[t.plotId]?.code || t.plotId})`
+        );
+        total++;
+      } catch {}
+    }
+  }
+
+  if (total === 0) return false;
+
+  readme.push("", `Total de imagens: ${total}`);
+  zip.file("README.txt", readme.join("\n"));
+
+  const b64 = await zip.generateAsync({
+    type: "base64",
+    compression: "STORE",
+  });
+  const uri =
+    FileSystem.documentDirectory + `${projectName}_IMAGENS.zip`;
+  await FileSystem.writeAsStringAsync(uri, b64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  await Sharing.shareAsync(uri, { mimeType: "application/zip" });
+  return true;
 }
 
 export async function exportKml(

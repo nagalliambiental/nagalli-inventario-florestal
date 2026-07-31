@@ -35,7 +35,15 @@
     "plugins": [
       "expo-sqlite",
       "expo-location",
-      "expo-camera"
+      "expo-camera",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Permite ao Nagalli Ambiental salvar as fotos do inventário na galeria do celular.",
+          "savePhotosPermission": "Permite ao Nagalli Ambiental salvar as fotos do inventário na galeria do celular.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ],
     "extra": {
       "eas": {

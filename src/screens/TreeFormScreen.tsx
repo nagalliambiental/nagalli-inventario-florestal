@@ -542,10 +542,13 @@ export function TreeFormScreen({ route, navigation }: Props) {
         onPhoto={(uri) => setPhotos((prev) => [...prev, { uri }])}
         caption={`Árvore #${number || "?"}`}
         buttonLabel={photos.length > 0 ? "Adicionar outra foto" : "Fotografar"}
+        latitude={latitude}
+        longitude={longitude}
       />
       {photos.length > 0 && (
         <Text style={styles.photoHint}>
-          As fotos ficam salvas no banco do aparelho. Toque em ✕ para remover.
+          As fotos ficam salvas na galeria do celular e no banco do aparelho.
+          Toque em ✕ para remover.
         </Text>
       )}
 

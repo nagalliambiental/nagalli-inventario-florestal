@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
+import * as MediaLibrary from "expo-media-library";
 import { colors } from "../constants/colors";
 import { PhotoWatermark } from "./PhotoWatermark";
 import { persistPhoto } from "../utils/photos";
@@ -10,6 +11,8 @@ interface Props {
   onPhoto: (uri: string) => void;
   caption?: string;
   buttonLabel?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface Pending {
@@ -19,13 +22,32 @@ interface Pending {
   caption?: string;
 }
 
-const MAX_DIM = 1600;
+const MAX_DIM = 1200;
 
-export function PhotoCapture({ onPhoto, caption, buttonLabel }: Props) {
+export function PhotoCapture({
+  onPhoto,
+  caption,
+  buttonLabel,
+  latitude,
+  longitude,
+}: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [showCamera, setShowCamera] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
   const cameraRef = useRef<CameraView>(null);
+
+  // Salva a foto (já com marca d'água) na galeria do aparelho.
+  const saveToGallery = async (fileUri: string) => {
+    try {
+      let perm = await MediaLibrary.getPermissionsAsync();
+      if (!perm.granted) {
+        perm = await MediaLibrary.requestPermissionsAsync(true);
+      }
+      if (perm.granted) {
+        await MediaLibrary.saveToLibraryAsync(fileUri);
+      }
+    } catch {}
+  };
 
   const finalize = async (watermarked: string | null, fallback: Pending) => {
     let uri = fallback.uri;
@@ -47,6 +69,7 @@ export function PhotoCapture({ onPhoto, caption, buttonLabel }: Props) {
       } catch {}
     }
     onPhoto(uri);
+    saveToGallery(uri);
   };
 
   const takePhoto = async () => {
@@ -63,29 +86,29 @@ export function PhotoCapture({ onPhoto, caption, buttonLabel }: Props) {
       );
       const maxDim = Math.max(processed.width, processed.height);
       if (maxDim > MAX_DIM) {
-        const scale = MAX_DIM / maxDim;
+        const s = MAX_DIM / maxDim;
         processed = await ImageManipulator.manipulateAsync(
           processed.uri,
           [
             {
               resize: {
-                width: Math.round(processed.width * scale),
-                height: Math.round(processed.height * scale),
+                width: Math.round(processed.width * s),
+                height: Math.round(processed.height * s),
               },
             },
           ],
           { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
         );
       }
-      const pendingData: Pending = {
+      setPending({
         uri: processed.uri,
         width: processed.width,
         height: processed.height,
         caption,
-      };
-      setPending(pendingData);
+      });
     } catch {
       onPhoto(result.uri);
+      saveToGallery(result.uri);
     }
   };
 
@@ -128,6 +151,8 @@ export function PhotoCapture({ onPhoto, caption, buttonLabel }: Props) {
           width={pending.width}
           height={pending.height}
           caption={pending.caption}
+          latitude={latitude}
+          longitude={longitude}
           onDone={async (watermarked) => {
             const snapshot = pending;
             setPending(null);

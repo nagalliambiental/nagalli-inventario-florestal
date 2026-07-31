@@ -8,6 +8,7 @@ import {
   Modal,
 } from "react-native";
 import { captureRef } from "react-native-view-shot";
+import { formatUtm } from "../utils/utm";
 
 const LOGO = require("../../assets/icon.png");
 
@@ -16,48 +17,82 @@ interface Props {
   width: number;
   height: number;
   caption?: string;
+  latitude?: number;
+  longitude?: number;
   onDone: (uri: string | null) => void;
 }
 
+const MAX_DISPLAY_W = 1080;
+const FALLBACK_TIMEOUT_MS = 8000;
+
 // Exibe a foto em tela cheia com a marca d'água da Nagalli Ambiental
-// (logo + data/hora da captura + legenda) e captura o resultado.
+// (logo + data/hora local + coordenada UTM + legenda) e captura o resultado.
 // Capturar uma view VISÍVEL (e não offscreen) evita imagem preta no Android.
-export function PhotoWatermark({ uri, width, height, caption, onDone }: Props) {
+export function PhotoWatermark({
+  uri,
+  width,
+  height,
+  caption,
+  latitude,
+  longitude,
+  onDone,
+}: Props) {
   const ref = useRef<View>(null);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const s = Math.max(0.6, Math.min(1.6, width / 1200));
+
+  // Reduz a tela de captura para acelerar o view-shot; a escala (s) mantém
+  // a marca d'água proporcional à resolução final.
+  const scale = Math.min(1, MAX_DISPLAY_W / width);
+  const displayW = Math.round(width * scale);
+  const displayH = Math.round(height * scale);
+  const s = Math.max(0.6, Math.min(1.6, displayW / 1200));
 
   useEffect(() => {
     if (!loaded && !failed) return;
     let cancelled = false;
+    let settled = false;
+    const finish = (result: string | null) => {
+      if (settled) return;
+      settled = true;
+      if (!cancelled) onDone(result);
+    };
+
+    // Garante que o modal SEMPRE fecha, mesmo se a captura falhar.
+    const timeout = setTimeout(() => finish(null), FALLBACK_TIMEOUT_MS);
+
     const run = async () => {
       try {
         await new Promise((r) => setTimeout(r, failed ? 300 : 150));
-        if (cancelled) return;
         if (failed) {
-          onDone(null);
+          finish(null);
           return;
         }
-        if (!ref.current) return;
+        if (!ref.current) {
+          finish(null);
+          return;
+        }
         const result = await captureRef(ref, {
           format: "png",
           quality: 1,
           result: "tmpfile",
         });
-        if (!cancelled) onDone(result);
+        finish(result);
       } catch {
-        if (!cancelled) onDone(null);
+        finish(null);
       }
     };
     run();
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
     };
   }, [loaded, failed]);
 
   const now = new Date();
   const datetime = `${now.toLocaleDateString("pt-BR")} ${now.toLocaleTimeString("pt-BR")}`;
+  const hasCoords = Number.isFinite(latitude) && Number.isFinite(longitude) && (latitude || 0) !== 0;
+  const utm = hasCoords ? formatUtm(latitude!, longitude!) : "";
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={() => {}}>
@@ -65,7 +100,7 @@ export function PhotoWatermark({ uri, width, height, caption, onDone }: Props) {
         <View
           ref={ref}
           collapsable={false}
-          style={[styles.capture, { width, height }]}
+          style={[styles.capture, { width: displayW, height: displayH }]}
         >
           <Image
             source={{ uri }}
@@ -89,18 +124,28 @@ export function PhotoWatermark({ uri, width, height, caption, onDone }: Props) {
             </View>
           </View>
           <View style={[styles.footer, { paddingVertical: 8 * s }]}>
-            <Text style={[styles.footerCaption, { fontSize: 12 * s }]}>
-              {caption || "Registro de campo"}
-            </Text>
+            {caption ? (
+              <Text style={[styles.footerCaption, { fontSize: 12 * s }]}>
+                {caption}
+              </Text>
+            ) : null}
             <Text style={[styles.footerTime, { fontSize: 13 * s }]}>
-              📷 {datetime} • NAGALLI AMBIENTAL
+              📷 {datetime}
+              {utm ? ` • UTM ${utm}` : " • NAGALLI AMBIENTAL"}
             </Text>
+            {utm ? (
+              <Text style={[styles.footerCoords, { fontSize: 10 * s }]}>
+                {Number(latitude).toFixed(6)}, {Number(longitude).toFixed(6)}
+              </Text>
+            ) : null}
           </View>
         </View>
         <View style={styles.progress}>
           <ActivityIndicator color="#fff" />
           <Text style={styles.progressText}>
-            {failed ? "Não foi possível carregar a foto" : "Aplicando marca d'água..."}
+            {failed
+              ? "Não foi possível carregar a foto"
+              : "Aplicando marca d'água..."}
           </Text>
         </View>
       </View>
@@ -139,13 +184,23 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.62)",
     alignItems: "center",
   },
-  footerCaption: { color: "#fff", textAlign: "center", paddingHorizontal: 8 },
+  footerCaption: {
+    color: "#fff",
+    textAlign: "center",
+    paddingHorizontal: 8,
+  },
   footerTime: {
     color: "#fff",
     fontWeight: "700",
     textAlign: "center",
     paddingHorizontal: 8,
     marginTop: 2,
+  },
+  footerCoords: {
+    color: "#dcdcdc",
+    textAlign: "center",
+    paddingHorizontal: 8,
+    marginTop: 1,
   },
   progress: {
     flexDirection: "row",
