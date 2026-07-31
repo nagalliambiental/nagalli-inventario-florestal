@@ -35,14 +35,6 @@ async function migrateDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
       "ALTER TABLE trees ADD COLUMN is_tree INTEGER DEFAULT 1"
     );
   }
-  // Indivíduos de espécies não arbóreas (erva, liana, arbusto...) não entram
-  // nos relatórios florestais — apenas no levantamento florístico.
-  await db.runAsync(
-    `UPDATE trees SET is_tree = 0
-     WHERE species_id IN (
-       SELECT id FROM species WHERE habito != '' AND habito != 'A - Arbórea'
-     )`
-  );
   if (!treeCols.has("height_comercial_m")) {
     await db.runAsync(
       "ALTER TABLE trees ADD COLUMN height_comercial_m REAL DEFAULT 0"
@@ -104,6 +96,17 @@ async function migrateDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
       await db.runAsync(`ALTER TABLE species ADD COLUMN ${col} TEXT DEFAULT ''`);
     }
   }
+
+  // Indivíduos de espécies não arbóreas (erva, liana, arbusto...) não entram
+  // nos relatórios florestais — apenas no levantamento florístico.
+  // Executa depois dos ALTER TABLE acima para garantir a existência da coluna
+  // habito em bancos criados por versões antigas.
+  await db.runAsync(
+    `UPDATE trees SET is_tree = 0
+     WHERE species_id IN (
+       SELECT id FROM species WHERE habito != '' AND habito != 'A - Arbórea'
+     )`
+  );
 }
 
 // ── Projects ──
