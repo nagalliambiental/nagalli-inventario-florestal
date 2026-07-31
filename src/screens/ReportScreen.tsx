@@ -258,7 +258,7 @@ export function ReportScreen({ route }: Props) {
           />
           <SamplingRow
             styles={styles}
-            label="t de Student (95%)"
+            label="t de Student (90%)"
             a={sampling.ba.tStudent}
             b={sampling.volume.tStudent}
             f={(v) => v.toFixed(3)}
