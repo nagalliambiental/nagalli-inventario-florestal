@@ -44,6 +44,8 @@ type StemInput = {
 const emptyStem = (): StemInput => ({ capCm: "", heightComercialM: "", heightTotalM: "" });
 
 const HABIT_OPTIONS = ["A - Arbórea", "Ar - Arbustiva", "Li - Liana", "Ep - Epífita", "Pt - Pteridófita", "B - Bambu"];
+const ARBOREA_HABIT = "A - Arbórea";
+const habitIsTree = (habit?: string) => !habit || habit === ARBOREA_HABIT;
 const DISTRIBUTION_OPTIONS = ["Comum", "Frequente", "Rara"];
 const ENDEMISM_OPTIONS = ["Não", "Mata Atlântica", "Brasil"];
 const CONSERVATION_OPTIONS = ["EN (IAT, 1995)", "EN (MMA, 2022)", "VU (MMA, 2022)", "CR (MMA, 2022)", "NT (MMA, 2022)", "LC (MMA, 2022)"];
@@ -79,6 +81,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
   const [notes, setNotes] = useState("");
   const [photoUri, setPhotoUri] = useState("");
   const [photos, setPhotos] = useState<{ id?: number; uri: string }[]>([]);
+  const [isTree, setIsTree] = useState(true);
   const [latitude, setLatitude] = useState(0);
   const [longitude, setLongitude] = useState(0);
 
@@ -160,6 +163,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
           setPhytosanitary(t.phytosanitary || "");
           setNotes(t.notes || "");
           setPhotoUri(t.photoUri || "");
+          setIsTree(t.isTree !== false);
           const saved: { id?: number; uri: string }[] = (t.photos || []).map((p) => ({ id: p.id, uri: p.uri }));
           if (saved.length === 0 && t.photoUri) {
             saved.push({ uri: t.photoUri });
@@ -197,6 +201,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
   const handleSelectSpecies = (s: Species) => {
     setSpeciesName(s.scientificName);
     setSpeciesId(s.id);
+    setIsTree(habitIsTree(s.habit));
     setShowSpeciesModal(false);
   };
 
@@ -236,6 +241,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
     );
     setSpeciesName(scientificName);
     setSpeciesId(created.id);
+    setIsTree(habitIsTree(created.habit));
     setNewSpecies({
       popularName: "", scientificName: "", family: "", woodDensity: "",
       habit: "", distribution: "", endemism: "", conservationStatus: "",
@@ -288,16 +294,18 @@ export function TreeFormScreen({ route, navigation }: Props) {
   };
 
   const handleSave = async () => {
-    if (stems === 1) {
-      if (!capCm || cap <= 0) {
-        Alert.alert("CAP obrigatório");
-        return;
-      }
-    } else {
-      const invalido = stemsData.some((s) => !s.capCm || parseFloat(s.capCm) <= 0);
-      if (invalido) {
-        Alert.alert("Preencha o CAP de todos os fustes");
-        return;
+    if (isTree) {
+      if (stems === 1) {
+        if (!capCm || cap <= 0) {
+          Alert.alert("CAP obrigatório");
+          return;
+        }
+      } else {
+        const invalido = stemsData.some((s) => !s.capCm || parseFloat(s.capCm) <= 0);
+        if (invalido) {
+          Alert.alert("Preencha o CAP de todos os fustes");
+          return;
+        }
       }
     }
 
@@ -309,7 +317,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
       }
       for (const p of photos) {
         if (p.id == null) {
-          await addTreePhoto(treeIdNum, p.uri, `Árvore #${number || "?"}`);
+          await addTreePhoto(treeIdNum, p.uri, `${isTree ? "Árvore" : "Indivíduo"} #${number || "?"}`);
         }
       }
     };
@@ -322,6 +330,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
         number: parseInt(number) || 1,
         speciesId,
         speciesName,
+        isTree,
         capCm: cap,
         heightComercialM: parseFloat(heightComercialM) || 0,
         heightTotalM: parseFloat(heightTotalM) || 0,
@@ -365,6 +374,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
         number: parseInt(number) || 1,
         speciesId,
         speciesName,
+        isTree,
         capCm: 0, // não se aplica em árvore multifuste — CAP fica por fuste
         heightComercialM: maxHeightComercial,
         heightTotalM: maxHeightTotal,
@@ -394,6 +404,33 @@ export function TreeFormScreen({ route, navigation }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.label}>Nº da árvore</Text>
       <TextInput style={styles.input} value={number} onChangeText={setNumber} keyboardType="number-pad" />
+
+      <Text style={styles.label}>Tipo de indivíduo</Text>
+      <View style={styles.stemRow}>
+        <TouchableOpacity
+          style={[styles.stemBtn, isTree && styles.stemBtnActive]}
+          onPress={() => setIsTree(true)}
+        >
+          <Text style={[styles.stemText, isTree && styles.stemTextActive]}>
+            🌳 Árvore
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.stemBtn, !isTree && styles.stemBtnActive]}
+          onPress={() => setIsTree(false)}
+        >
+          <Text style={[styles.stemText, !isTree && styles.stemTextActive]}>
+            🌿 Não-árvore
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {!isTree && (
+        <Text style={styles.photoHint}>
+          Erva, liana, arbusto ou outro não arbóreo: não entra na distribuição
+          diamétrica nem nos demais relatórios florestais — apenas no
+          levantamento florístico.
+        </Text>
+      )}
 
       <Text style={styles.label}>Nº de fustes</Text>
       <View style={styles.stemRow}>
@@ -540,7 +577,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
       )}
       <PhotoCapture
         onPhoto={(uri) => setPhotos((prev) => [...prev, { uri }])}
-        caption={`Árvore #${number || "?"}`}
+        caption={`${isTree ? "Árvore" : "Indivíduo"} #${number || "?"}`}
         buttonLabel={photos.length > 0 ? "Adicionar outra foto" : "Fotografar"}
         latitude={latitude}
         longitude={longitude}

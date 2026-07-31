@@ -50,7 +50,7 @@ export function ProjectScreen({ route, navigation }: Props) {
 
   if (!project) return null;
 
-  const vols = sumTreeVolumes(trees);
+  const vols = sumTreeVolumes(trees.filter((t) => t.isTree));
 
   return (
     <View style={styles.container}>

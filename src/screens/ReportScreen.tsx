@@ -68,17 +68,19 @@ export function ReportScreen({ route }: Props) {
 
   if (!project) return null;
 
-  const results = calcPlotResults(trees);
-  const shannon = calcShannon(trees);
-  const pielou = calcPielou(trees, shannon);
-  const ivi = calcIVI(trees);
-  const sufficiency = calcSufficiency(trees);
+  const treeTrees = trees.filter((t) => t.isTree);
+  const nonTreeCount = trees.length - treeTrees.length;
+  const results = calcPlotResults(treeTrees);
+  const shannon = calcShannon(treeTrees);
+  const pielou = calcPielou(treeTrees, shannon);
+  const ivi = calcIVI(treeTrees);
+  const sufficiency = calcSufficiency(treeTrees);
   const sampling =
     project.method === "parcelas_fixas"
-      ? buildSamplingReport(project, plots, trees)
+      ? buildSamplingReport(project, plots, treeTrees)
       : null;
 
-  const speciesVolumes = calcSpeciesVolumes(trees);
+  const speciesVolumes = calcSpeciesVolumes(treeTrees);
   const totalVolumes = speciesVolumes.reduce(
     (acc, s) => ({
       volumeTora: acc.volumeTora + s.volumeTora,
@@ -89,10 +91,10 @@ export function ReportScreen({ route }: Props) {
   );
 
   const areaHa = plots.reduce((s, p) => s + (p.areaM2 > 0 ? p.areaM2 : 0), 0) / 10000;
-  const diametric = calcDiameterDistribution(trees, areaHa || 1);
-  const horizontal = calcHorizontalStructure(plots, trees);
-  const vertical = calcVerticalStructure(trees);
-  const conama = calcConama(trees, species, areaHa || 1);
+  const diametric = calcDiameterDistribution(treeTrees, areaHa || 1);
+  const horizontal = calcHorizontalStructure(plots, treeTrees);
+  const vertical = calcVerticalStructure(treeTrees);
+  const conama = calcConama(treeTrees, species, areaHa || 1);
   const floristic = calcFloristic(trees, species);
   const threatened = floristic.filter((f) => f.threatened);
 
@@ -105,7 +107,7 @@ export function ReportScreen({ route }: Props) {
       `Método: ${project.method}`,
       `Área: ${project.areaHa} ha`,
       "",
-      `Total de árvores: ${trees.length}`,
+      `Total de árvores: ${treeTrees.length}`,
       `Total de espécies: ${results.speciesCount}`,
       `Área basal total: ${fmtM2(results.basalAreaTotal)}`,
       `Volume total: ${fmtM3(results.volumeTotal)}`,
@@ -141,7 +143,7 @@ export function ReportScreen({ route }: Props) {
 
       {/* General stats */}
       <Section styles={styles} title="Estatísticas gerais">
-        <StatRow styles={styles} label="Total de árvores" value={String(trees.length)} />
+        <StatRow styles={styles} label="Total de árvores" value={String(treeTrees.length)} />
         <StatRow styles={styles} label="Total de espécies" value={String(results.speciesCount)} />
         <StatRow styles={styles} label="DAP médio" value={fmtCm(results.avgDbh)} />
         <StatRow styles={styles} label="Altura média" value={fmtM(results.avgHeight)} />
@@ -442,6 +444,12 @@ export function ReportScreen({ route }: Props) {
 
       {/* Levantamento florístico / ameaçadas */}
       <Section styles={styles} title="Levantamento florístico e espécies ameaçadas">
+        {nonTreeCount > 0 && (
+          <Text style={styles.samplingHint}>
+            Inclui {nonTreeCount} indivíduo(s) não arbóreo(s) — ervas, lianas,
+            arbustos etc. (exclusivos deste relatório).
+          </Text>
+        )}
         {threatened.length > 0 && (
           <View style={styles.samplingAlert}>
             <Text style={styles.samplingAlertText}>
@@ -501,7 +509,7 @@ export function ReportScreen({ route }: Props) {
         <View style={styles.volTotalRow}>
           <Text style={[styles.volColName, styles.volTotalText]}>Total</Text>
           <Text style={[styles.volColNum, styles.volTotalText]}>
-            {trees.length}
+            {treeTrees.length}
           </Text>
           <Text style={[styles.volColNum, styles.volTotalText]}>
             {fmtM3(totalVolumes.volumeTora)}

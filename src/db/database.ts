@@ -30,6 +30,19 @@ async function migrateDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
   };
 
   const treeCols = await tableColumns("trees");
+  if (!treeCols.has("is_tree")) {
+    await db.runAsync(
+      "ALTER TABLE trees ADD COLUMN is_tree INTEGER DEFAULT 1"
+    );
+  }
+  // Indivíduos de espécies não arbóreas (erva, liana, arbusto...) não entram
+  // nos relatórios florestais — apenas no levantamento florístico.
+  await db.runAsync(
+    `UPDATE trees SET is_tree = 0
+     WHERE species_id IN (
+       SELECT id FROM species WHERE habito != '' AND habito != 'A - Arbórea'
+     )`
+  );
   if (!treeCols.has("height_comercial_m")) {
     await db.runAsync(
       "ALTER TABLE trees ADD COLUMN height_comercial_m REAL DEFAULT 0"
@@ -195,12 +208,13 @@ export async function createTree(data: TreePayload): Promise<number> {
   let treeId = 0;
   await db.withTransactionAsync(async () => {
     const result = await db.runAsync(
-      `INSERT INTO trees (plot_id, number, species_id, species_name,
+      `INSERT INTO trees (plot_id, number, species_id, species_name, is_tree,
         cap_cm, height_comercial_m, height_total_m, dbh_cm, basal_area_m2, stem_count,
         phytosanitary, photo_uri, notes, latitude, longitude)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.plotId, data.number, data.speciesId, data.speciesName,
+        data.isTree === false ? 0 : 1,
         data.capCm, data.heightComercialM, data.heightTotalM, data.dbhCm,
         data.basalAreaM2, data.stemCount,
         data.phytosanitary, data.photoUri, data.notes, data.latitude, data.longitude,
@@ -223,6 +237,7 @@ export async function updateTree(
   if (data.number !== undefined) { fields.push("number = ?"); values.push(data.number); }
   if (data.speciesId !== undefined) { fields.push("species_id = ?"); values.push(data.speciesId); }
   if (data.speciesName !== undefined) { fields.push("species_name = ?"); values.push(data.speciesName); }
+  if (data.isTree !== undefined) { fields.push("is_tree = ?"); values.push(data.isTree ? 1 : 0); }
   if (data.capCm !== undefined) { fields.push("cap_cm = ?"); values.push(data.capCm); }
   if (data.heightComercialM !== undefined) { fields.push("height_comercial_m = ?"); values.push(data.heightComercialM); }
   if (data.heightTotalM !== undefined) { fields.push("height_total_m = ?"); values.push(data.heightTotalM); }
@@ -404,7 +419,7 @@ export async function getProjectSummary(
   const treeRow = await db.getFirstAsync<any>(
     `SELECT COUNT(*) as tc, COALESCE(SUM(basal_area_m2),0) as ba
      FROM trees t JOIN plots p ON t.plot_id = p.id
-     WHERE p.project_id = ?`,
+     WHERE p.project_id = ? AND t.is_tree = 1`,
     [projectId]
   );
 
@@ -412,7 +427,7 @@ export async function getProjectSummary(
     await db.getFirstAsync<{ c: number }>(
       `SELECT COUNT(DISTINCT t.species_id) as c
        FROM trees t JOIN plots p ON t.plot_id = p.id
-       WHERE p.project_id = ? AND t.species_id IS NOT NULL`,
+       WHERE p.project_id = ? AND t.is_tree = 1 AND t.species_id IS NOT NULL`,
       [projectId]
     )
   )!.c;
@@ -456,6 +471,7 @@ const mapper = {
     number: r.number,
     speciesId: r.species_id,
     speciesName: r.species_name,
+    isTree: r.is_tree !== 0,
     capCm: r.cap_cm ?? 0,
     heightComercialM: r.height_comercial_m ?? 0,
     heightTotalM: r.height_total_m ?? 0,

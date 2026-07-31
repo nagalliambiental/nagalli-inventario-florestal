@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS trees (
   number INTEGER NOT NULL,
   species_id INTEGER,
   species_name TEXT,
+  is_tree INTEGER DEFAULT 1,
   cap_cm REAL NOT NULL DEFAULT 0,
   height_comercial_m REAL DEFAULT 0,
   height_total_m REAL DEFAULT 0,

@@ -33,10 +33,11 @@ export function PlotScreen({ route, navigation }: Props) {
     setTrees(t);
   };
 
-  const results = calcPlotResults(trees);
-  const shannon = calcShannon(trees);
-  const pielou = calcPielou(trees, shannon);
-  const vols = sumTreeVolumes(trees);
+  const treeTrees = trees.filter((t) => t.isTree);
+  const results = calcPlotResults(treeTrees);
+  const shannon = calcShannon(treeTrees);
+  const pielou = calcPielou(treeTrees, shannon);
+  const vols = sumTreeVolumes(treeTrees);
 
   const handleDelete = (id: number, num: number) => {
     Alert.alert("Excluir", `Excluir árvore #${num}?`, [
@@ -49,7 +50,7 @@ export function PlotScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       <View style={styles.results}>
         <View style={styles.row}>
-          <MiniStat label="Árvores" value={String(trees.length)} />
+          <MiniStat label="Árvores" value={String(treeTrees.length)} />
           <MiniStat label="Espécies" value={String(results.speciesCount)} />
           <MiniStat label="Área basal" value={fmtM2(results.basalAreaTotal)} />
           <MiniStat label="Vol. comercial" value={`${results.volumeTotal.toFixed(1)} m³`} />
@@ -80,6 +81,9 @@ export function PlotScreen({ route, navigation }: Props) {
           >
             <View style={styles.cardHeader}>
               <Text style={styles.treeNum}>#{item.number}</Text>
+              {item.isTree === false && (
+                <Text style={styles.nonTreeTag}>não-árvore</Text>
+              )}
               <Text style={styles.species}>{item.speciesName || "—"}</Text>
             </View>
             <View style={styles.cardRow}>
@@ -136,6 +140,16 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  nonTreeTag: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#fff",
+    backgroundColor: colors.secondary,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    overflow: "hidden",
+  },
   treeNum: { fontSize: 16, fontWeight: "700", color: colors.text },
   species: { fontSize: 15, color: colors.textSecondary, fontStyle: "italic" },
   cardRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 6 },

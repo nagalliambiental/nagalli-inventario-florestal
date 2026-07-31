@@ -54,23 +54,26 @@ export async function exportXlsx(
 
   const methodLabel = METHOD_LABEL[project.method] || project.method;
 
-  const results = calcPlotResults(trees);
-  const shannon = calcShannon(trees);
-  const pielou = calcPielou(trees, shannon);
-  const ivi = calcIVI(trees);
-  const sufficiency = calcSufficiency(trees);
-  const speciesVolumes = calcSpeciesVolumes(trees);
-  const totalVolumes = sumTreeVolumes(trees);
+  const treeTrees = trees.filter((t) => t.isTree);
+  const nonTreeCount = trees.length - treeTrees.length;
+
+  const results = calcPlotResults(treeTrees);
+  const shannon = calcShannon(treeTrees);
+  const pielou = calcPielou(treeTrees, shannon);
+  const ivi = calcIVI(treeTrees);
+  const sufficiency = calcSufficiency(treeTrees);
+  const speciesVolumes = calcSpeciesVolumes(treeTrees);
+  const totalVolumes = sumTreeVolumes(treeTrees);
   const areaHa =
     plots.reduce((s, p) => s + (p.areaM2 > 0 ? p.areaM2 : 0), 0) / 10000;
-  const diametric = calcDiameterDistribution(trees, areaHa || 1);
-  const horizontal = calcHorizontalStructure(plots, trees);
-  const vertical = calcVerticalStructure(trees);
-  const conama = calcConama(trees, species, areaHa || 1);
+  const diametric = calcDiameterDistribution(treeTrees, areaHa || 1);
+  const horizontal = calcHorizontalStructure(plots, treeTrees);
+  const vertical = calcVerticalStructure(treeTrees);
+  const conama = calcConama(treeTrees, species, areaHa || 1);
   const floristic = calcFloristic(trees, species);
   const sampling =
     project.method === "parcelas_fixas"
-      ? buildSamplingReport(project, plots, trees)
+      ? buildSamplingReport(project, plots, treeTrees)
       : null;
 
   const wb = XLSX.utils.book_new();
@@ -112,7 +115,8 @@ export async function exportXlsx(
       ["Método", methodLabel],
       ["Área (ha)", project.areaHa],
       ["Total de parcelas", plots.length],
-      ["Total de árvores", trees.length],
+      ["Total de árvores", treeTrees.length],
+      ["Total de não-árvores (florístico)", nonTreeCount],
       ["Total de espécies", results.speciesCount],
       ["DAP médio (cm)", r2(results.avgDbh)],
       ["Altura média (m)", r2(results.avgHeight)],
@@ -141,7 +145,7 @@ export async function exportXlsx(
     "Fustes", "Vol tora (m³)", "Vol total (m³)", "Vol lenha (m³)",
     "Condição", "Latitude", "Longitude", "Observações",
   ];
-  const treeRows = trees.map((t) => {
+  const treeRows = treeTrees.map((t) => {
     const plot = plots.find((p) => p.id === t.plotId);
     const cap = t.capCm || t.fustes.reduce((s, f) => s + f.capCm, 0);
     const v = treeVolumes(t);
@@ -167,13 +171,13 @@ export async function exportXlsx(
   appendSheet("Árvores", [treeCols, ...treeRows], [10, 9, 24, 10, 10, 12, 12, 10, 7, 10, 10, 10, 12, 10, 10, 24]);
 
   // ── Fustes ──
-  if (treeRows.length > 0 && trees.some((t) => (t.fustes || []).length > 0)) {
+  if (treeRows.length > 0 && treeTrees.some((t) => (t.fustes || []).length > 0)) {
     const stemCols = [
       "Parcela", "Nº Árvore", "Fuste", "CAP (cm)", "DAP (cm)",
       "Altura comercial (m)", "Altura total (m)", "Área basal (m²)",
     ];
     const stemRows: (string | number)[][] = [];
-    trees.forEach((t) => {
+    treeTrees.forEach((t) => {
       const plot = plots.find((p) => p.id === t.plotId);
       (t.fustes || []).forEach((f, i) => {
         stemRows.push([
@@ -229,7 +233,7 @@ export async function exportXlsx(
       ]),
       [
         "TOTAL",
-        trees.length,
+        treeTrees.length,
         r3(totalVolumes.volumeTora),
         r3(totalVolumes.volumeTotal),
         r3(totalVolumes.volumeLenha),

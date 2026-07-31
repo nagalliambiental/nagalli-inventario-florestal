@@ -32,6 +32,7 @@ export interface Tree {
   number: number;
   speciesId: number | null;
   speciesName: string;
+  isTree: boolean;
   capCm: number;
   heightComercialM: number;
   heightTotalM: number;
