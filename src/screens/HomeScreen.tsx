@@ -9,9 +9,11 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { listProjects, deleteProject } from "../db/database";
+import * as DocumentPicker from "expo-document-picker";
+import { listProjects, deleteProject, getProject } from "../db/database";
 import { colors } from "../constants/colors";
 import { fmtDate, methodLabel } from "../utils/formats";
+import { importProjectBackup, importExcelData } from "../utils/backup";
 import type { Project } from "../types";
 import type { RootStackParamList } from "../types/navigation";
 
@@ -26,6 +28,53 @@ export function HomeScreen({ navigation }: Props) {
     }, [])
   );
 
+  const openImport = () => {
+    Alert.alert("Importar dados", "O que você quer importar?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Backup do projeto (.zip)",
+        onPress: () => pickAndImport("backup"),
+      },
+      {
+        text: "Planilha de campo (.xlsx)",
+        onPress: () => pickAndImport("excel"),
+      },
+    ]);
+  };
+
+  const pickAndImport = async (kind: "backup" | "excel") => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type:
+          kind === "backup"
+            ? ["application/zip", "application/octet-stream"]
+            : [
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/octet-stream",
+              ],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      let newId: number;
+      if (kind === "backup") {
+        newId = await importProjectBackup(asset.uri);
+      } else {
+        const baseName = (asset.name || "planilha")
+          .replace(/\.xlsx$/i, "")
+          .replace(/\.xls$/i, "");
+        newId = await importExcelData(asset.uri, baseName);
+      }
+      const project = await getProject(newId);
+      Alert.alert("Importação concluída", `Projeto "${project?.name}" criado com sucesso.`, [
+        { text: "Fechar" },
+        { text: "Abrir projeto", onPress: () => navigation.navigate("Project", { projectId: newId }) },
+      ]);
+    } catch (e: any) {
+      Alert.alert("Erro na importação", e?.message || "Não foi possível importar o arquivo.");
+    }
+  };
+
   const handleDelete = (id: number, name: string) => {
     Alert.alert("Excluir projeto", `Excluir "${name}"?`, [
       { text: "Cancelar", style: "cancel" },
@@ -35,6 +84,20 @@ export function HomeScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <View style={styles.toolbar}>
+        <TouchableOpacity
+          style={styles.toolBtn}
+          onPress={openImport}
+        >
+          <Text style={styles.toolText}>📥 Importar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.toolBtn}
+          onPress={() => navigation.navigate("Pin")}
+        >
+          <Text style={styles.toolText}>🔒 Segurança</Text>
+        </TouchableOpacity>
+      </View>
       <FlatList
         data={projects}
         keyExtractor={(i) => String(i.id)}
@@ -69,6 +132,22 @@ export function HomeScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  toolbar: {
+    flexDirection: "row",
+    padding: 16,
+    paddingBottom: 0,
+    gap: 12,
+  },
+  toolBtn: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  toolText: { color: colors.primary, fontWeight: "600", fontSize: 14 },
   list: { padding: 16, paddingBottom: 80 },
   empty: { textAlign: "center", color: colors.textLight, marginTop: 60, fontSize: 16 },
   card: {

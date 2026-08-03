@@ -25,6 +25,7 @@ import { useMemo } from "react";
 import { calcSufficiency } from "../utils/sufficiency";
 import { buildSamplingReport } from "../utils/sampling";
 import { exportXlsx, exportKml, exportProjectImages } from "../utils/export";
+import { exportProjectBackup } from "../utils/backup";
 import { useTheme } from "../contexts/ThemeContext";
 import { calcDiameterDistribution } from "../utils/diametric";
 import {
@@ -569,6 +570,22 @@ export function ReportScreen({ route }: Props) {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity
+        style={[styles.actionBtn, styles.backupBtn]}
+        onPress={async () => {
+          try {
+            const ok = await exportProjectBackup(projectId);
+            if (!ok) {
+              Alert.alert("Erro", "Não foi possível gerar o backup.");
+            }
+          } catch (e: any) {
+            Alert.alert("Erro", e?.message || "Falha ao exportar o backup.");
+          }
+        }}
+      >
+        <Text style={styles.backupText}>💾 Exportar projeto completo (backup)</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
         <Text style={styles.shareText}>Compartilhar</Text>
       </TouchableOpacity>
@@ -823,6 +840,12 @@ function useStyles(colors: any) {
           flex: 1, borderRadius: 10, padding: 14, alignItems: "center",
         },
         actionText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+        backupBtn: {
+          backgroundColor: colors.secondary,
+          padding: 16,
+          marginBottom: 12,
+        },
+        backupText: { color: colors.white, fontSize: 15, fontWeight: "700" },
         shareBtn: {
           backgroundColor: colors.primary,
           borderRadius: 10,

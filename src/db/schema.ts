@@ -81,6 +81,10 @@ CREATE TABLE IF NOT EXISTS species (
   gramineas TEXT DEFAULT '',
   regeneracao_dossel TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS app_config (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_plots_project ON plots(project_id);
 CREATE INDEX IF NOT EXISTS idx_trees_plot ON trees(plot_id);
 CREATE INDEX IF NOT EXISTS idx_trees_species ON trees(species_id);

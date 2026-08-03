@@ -6,4 +6,5 @@ export type RootStackParamList = {
   Plot: { plotId: number };
   TreeForm: { plotId: number; treeId?: number };
   Report: { projectId: number };
+  Pin: undefined;
 };

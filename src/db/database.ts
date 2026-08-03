@@ -412,6 +412,28 @@ export async function deleteSpecies(id: number): Promise<void> {
   await db.runAsync("DELETE FROM species WHERE id = ?", [id]);
 }
 
+// ── Configurações do app (ex.: PIN de acesso) ──
+
+export async function getConfig(key: string): Promise<string | null> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    "SELECT value FROM app_config WHERE key = ?",
+    [key]
+  );
+  return row ? row.value : null;
+}
+
+export async function setConfig(key: string, value: string): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO app_config (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    [key, value]
+  );
+}
+
+export async function deleteConfig(key: string): Promise<void> {
+  await db.runAsync("DELETE FROM app_config WHERE key = ?", [key]);
+}
+
 // ── Stats ──
 
 export async function getProjectSummary(
