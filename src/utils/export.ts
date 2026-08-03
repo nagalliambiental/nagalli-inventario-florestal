@@ -64,7 +64,11 @@ export async function exportXlsx(
   const shannon = calcShannon(treeTrees);
   const pielou = calcPielou(treeTrees, shannon);
   const ivi = calcIVI(treeTrees);
-  const sufficiency = calcSufficiency(treeTrees);
+  const sampling =
+    project.method === "parcelas_fixas"
+      ? buildSamplingReport(project, plots, treeTrees)
+      : null;
+  const sufficiency = calcSufficiency(treeTrees, project.method, sampling);
   const speciesVolumes = calcSpeciesVolumes(treeTrees);
   const totalVolumes = sumTreeVolumes(treeTrees);
   const areaHa =
@@ -74,10 +78,6 @@ export async function exportXlsx(
   const vertical = calcVerticalStructure(treeTrees);
   const conama = calcConama(treeTrees, species, areaHa || 1);
   const floristic = calcFloristic(trees, species);
-  const sampling =
-    project.method === "parcelas_fixas"
-      ? buildSamplingReport(project, plots, treeTrees)
-      : null;
 
   const wb = XLSX.utils.book_new();
 
@@ -137,6 +137,7 @@ export async function exportXlsx(
         "Suficiência amostral",
         sufficiency.sufficient ? "Atingida" : "Não atingida",
       ],
+      ["Critério de suficiência", sufficiency.reason],
     ],
     [24, 40]
   );
@@ -476,23 +477,58 @@ export async function exportXlsx(
     appendSheet("Análise CONAMA", conamaRows, [28, 40]);
   }
 
-  // ── Levantamento florístico ──
+  // ── Florístico oficial (formato EURO: Família | Espécie | Hábito | Status) ──
   if (floristic.length > 0) {
+    const HABIT_CODE: Record<string, string> = {
+      A: "A", "A - Arbórea": "A", "Arbórea": "A", Árvore: "A",
+      Ar: "Ar", "Ar - Arbustiva": "Ar", Arbustiva: "Ar",
+      Er: "Er.", Erva: "Er.", Herbácea: "Er.",
+      Li: "Li", "Li - Liana": "Li", Liana: "Li",
+      Ep: "Ep.", "Ep - Epífita": "Ep.", "Epífita": "Ep.",
+      Pt: "Pt.", "Pt - Pteridófita": "Pt.", "Pteridófita": "Pt.",
+      B: "B", "B - Bambu": "B", Bambu: "B",
+    };
+    const habitCode = (h: string): string => {
+      if (!h) return "";
+      const t = h.trim();
+      if (HABIT_CODE[t]) return HABIT_CODE[t];
+      const prefix = t.split(" - ")[0].trim();
+      return HABIT_CODE[prefix] ?? t;
+    };
+
+    const byFamily: Record<
+      string,
+      { name: string; habit: string; status: string }[]
+    > = {};
+    floristic
+      .filter(
+        (f) =>
+          !/^(morta|-|não identificada|nao identificada)$/i.test(
+            f.speciesName.trim()
+          )
+      )
+      .forEach((f) => {
+        const fam = f.family?.trim() || "—";
+        (byFamily[fam] = byFamily[fam] || []).push({
+          name: f.speciesName.trim(),
+          habit: habitCode(f.habit),
+          status: f.conservationStatus?.trim() || "",
+        });
+      });
+
     const florRows: (string | number)[][] = [
-      ["Espécie", "N", "Nome popular", "Família", "Hábito", "Distribuição", "Endemismo", "Status de conservação", "Ameaçada"],
-      ...floristic.map((f) => [
-        f.speciesName,
-        f.n,
-        f.popularName,
-        f.family,
-        f.habit,
-        f.distribution,
-        f.endemism,
-        f.conservationStatus,
-        f.threatened ? "Sim" : "Não",
-      ]),
+      ["Família", "Espécie", "Hábito", "Status"],
     ];
-    appendSheet("Levantamento florístico", florRows, [24, 6, 20, 16, 14, 16, 16, 20, 10]);
+    Object.keys(byFamily)
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .forEach((fam) => {
+        byFamily[fam]
+          .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+          .forEach((s, i) => {
+            florRows.push([i === 0 ? fam : "", s.name, s.habit, s.status]);
+          });
+      });
+    appendSheet("Florístico oficial", florRows, [20, 30, 10, 30]);
   }
 
   wb.Props = {

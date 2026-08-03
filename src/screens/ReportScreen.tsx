@@ -74,11 +74,11 @@ export function ReportScreen({ route }: Props) {
   const shannon = calcShannon(treeTrees);
   const pielou = calcPielou(treeTrees, shannon);
   const ivi = calcIVI(treeTrees);
-  const sufficiency = calcSufficiency(treeTrees);
   const sampling =
     project.method === "parcelas_fixas"
       ? buildSamplingReport(project, plots, treeTrees)
       : null;
+  const sufficiency = calcSufficiency(treeTrees, project.method, sampling);
 
   const speciesVolumes = calcSpeciesVolumes(treeTrees);
   const totalVolumes = speciesVolumes.reduce(
@@ -177,14 +177,16 @@ export function ReportScreen({ route }: Props) {
       <Section styles={styles} title="Suficiência amostral">
         <Text style={styles.sufficiencyText}>
           {sufficiency.sufficient
-            ? "✅ Suficiência amostral atingida"
-            : "⚠️ Continue amostrando — a curva de espécies ainda não estabilizou"}
+            ? `✅ Suficiência amostral atingida — ${sufficiency.reason}`
+            : `⚠️ ${sufficiency.reason}`}
         </Text>
         <StatRow styles={styles} label="Espécies registradas" value={String(sufficiency.totalSpecies)} />
-        <StatRow styles={styles}
-          label="Últimas amostras"
-          value={`${sufficiency.sampled.length} pontos`}
-        />
+        {sampling === null && sufficiency.sampled.length > 0 && (
+          <StatRow styles={styles}
+            label="Últimas amostras"
+            value={`${sufficiency.sampled.length} pontos`}
+          />
+        )}
       </Section>
 
       {/* Amostragem casual simples (parcelas fixas) */}

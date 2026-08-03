@@ -5,18 +5,60 @@ export interface SufficiencyResult {
   sampled: { trees: number; species: number }[];
   curve: { x: number; y: number }[];
   sufficient: boolean;
+  reason: string;
 }
 
-export function calcSufficiency(trees: Tree[]): SufficiencyResult {
+function countSpecies(trees: Tree[]): number {
+  return new Set(trees.map((t) => t.speciesName).filter(Boolean)).size;
+}
+
+/**
+ * Suficiência amostral por método:
+ * - censo: cobertura total, suficiente por definição;
+ * - parcelas fixas: critério estatístico da planilha de referência (erro
+ *   relativo de amostragem do volume ≤ 20%);
+ * - pcqm / árvores isoladas: estabilização da curva de acumulação de espécies.
+ */
+export function calcSufficiency(
+  trees: Tree[],
+  method = "",
+  sampling?: { volume?: { relativeError: number } | null } | null
+): SufficiencyResult {
   if (trees.length === 0) {
-    return { totalSpecies: 0, sampled: [], curve: [], sufficient: false };
+    return {
+      totalSpecies: 0,
+      sampled: [],
+      curve: [],
+      sufficient: false,
+      reason: "Sem árvores registradas",
+    };
+  }
+
+  if (method === "censo") {
+    return {
+      totalSpecies: countSpecies(trees),
+      sampled: [],
+      curve: [],
+      sufficient: true,
+      reason: "Censo completo — 100% da área inventariada",
+    };
+  }
+
+  if (method === "parcelas_fixas" && sampling?.volume) {
+    const relErr = sampling.volume.relativeError;
+    return {
+      totalSpecies: countSpecies(trees),
+      sampled: [],
+      curve: [],
+      sufficient: relErr <= 20,
+      reason: `Erro relativo de amostragem do volume: ${relErr.toFixed(1)}% (critério ≤ 20%)`,
+    };
   }
 
   const sampled: { trees: number; species: number }[] = [];
   const seen = new Set<string>();
   let speciesCount = 0;
 
-  // Sort by tree number for ordered sampling
   const sorted = [...trees].sort((a, b) => a.number - b.number);
 
   for (let i = 0; i < sorted.length; i++) {
@@ -32,10 +74,15 @@ export function calcSufficiency(trees: Tree[]): SufficiencyResult {
 
   const curve = sampled.map((s) => ({ x: s.trees, y: s.species }));
 
-  // Simple heuristic: if last 20% of samples added < 10% new species → sufficient
   const threshold = Math.max(5, Math.floor(sampled.length * 0.2));
   if (sampled.length < threshold + 2) {
-    return { totalSpecies: speciesCount, sampled, curve, sufficient: false };
+    return {
+      totalSpecies: speciesCount,
+      sampled,
+      curve,
+      sufficient: false,
+      reason: "A curva de espécies ainda não estabilizou",
+    };
   }
 
   const recent = sampled.slice(-threshold);
@@ -44,5 +91,13 @@ export function calcSufficiency(trees: Tree[]): SufficiencyResult {
   const gain = lastSpecies - firstRecentSpecies;
   const sufficient = gain / Math.max(1, lastSpecies) < 0.1;
 
-  return { totalSpecies: speciesCount, sampled, curve, sufficient };
+  return {
+    totalSpecies: speciesCount,
+    sampled,
+    curve,
+    sufficient,
+    reason: sufficient
+      ? "Curva de acumulação de espécies estabilizada"
+      : "A curva de espécies ainda não estabilizou",
+  };
 }
