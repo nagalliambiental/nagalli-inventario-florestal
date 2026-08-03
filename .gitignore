@@ -8,3 +8,8 @@ dist/
 *.mobileprovision
 *.orig.*
 web-build/
+
+# Servidor
+server/.env
+server/node_modules/
+

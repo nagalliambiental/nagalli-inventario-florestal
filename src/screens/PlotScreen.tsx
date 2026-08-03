@@ -39,7 +39,7 @@ export function PlotScreen({ route, navigation }: Props) {
   const pielou = calcPielou(treeTrees, shannon);
   const vols = sumTreeVolumes(treeTrees);
 
-  const handleDelete = (id: number, num: number) => {
+  const handleDelete = (id: string, num: number) => {
     Alert.alert("Excluir", `Excluir árvore #${num}?`, [
       { text: "Cancelar", style: "cancel" },
       { text: "Excluir", style: "destructive", onPress: () => deleteTree(id).then(loadTrees) },

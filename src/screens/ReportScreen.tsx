@@ -27,6 +27,7 @@ import { buildSamplingReport } from "../utils/sampling";
 import { exportXlsx, exportKml, exportProjectImages } from "../utils/export";
 import { exportProjectBackup } from "../utils/backup";
 import { useTheme } from "../contexts/ThemeContext";
+import { useUser } from "../contexts/UserContext";
 import { calcDiameterDistribution } from "../utils/diametric";
 import {
   calcHorizontalStructure,
@@ -41,6 +42,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "Report">;
 export function ReportScreen({ route }: Props) {
   const { projectId } = route.params;
   const { colors, isDark, toggle } = useTheme();
+  const { isAdmin } = useUser();
   const [project, setProject] = useState<Project | null>(null);
   const [trees, setTrees] = useState<Tree[]>([]);
   const [plots, setPlots] = useState<Plot[]>([]);
@@ -570,21 +572,23 @@ export function ReportScreen({ route }: Props) {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={[styles.actionBtn, styles.backupBtn]}
-        onPress={async () => {
-          try {
-            const ok = await exportProjectBackup(projectId);
-            if (!ok) {
-              Alert.alert("Erro", "Não foi possível gerar o backup.");
+      {isAdmin && (
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.backupBtn]}
+          onPress={async () => {
+            try {
+              const ok = await exportProjectBackup(projectId);
+              if (!ok) {
+                Alert.alert("Erro", "Não foi possível gerar o backup.");
+              }
+            } catch (e: any) {
+              Alert.alert("Erro", e?.message || "Falha ao exportar o backup.");
             }
-          } catch (e: any) {
-            Alert.alert("Erro", e?.message || "Falha ao exportar o backup.");
-          }
-        }}
-      >
-        <Text style={styles.backupText}>💾 Exportar projeto completo (backup)</Text>
-      </TouchableOpacity>
+          }}
+        >
+          <Text style={styles.backupText}>💾 Exportar projeto completo (backup)</Text>
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
         <Text style={styles.shareText}>Compartilhar</Text>

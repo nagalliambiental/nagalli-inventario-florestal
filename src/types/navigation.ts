@@ -1,10 +1,10 @@
 export type RootStackParamList = {
   Home: undefined;
-  ProjectForm: { projectId?: number };
-  Project: { projectId: number };
-  PlotForm: { projectId: number; plotId?: number };
-  Plot: { plotId: number };
-  TreeForm: { plotId: number; treeId?: number };
-  Report: { projectId: number };
-  Pin: undefined;
+  ProjectForm: { projectId?: string };
+  Project: { projectId: string };
+  PlotForm: { projectId: string; plotId?: string };
+  Plot: { plotId: string };
+  TreeForm: { plotId: string; treeId?: string };
+  Report: { projectId: string };
+  Users: undefined;
 };

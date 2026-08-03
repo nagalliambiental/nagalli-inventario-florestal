@@ -1,0 +1,23 @@
+# Blueprint de deploy da API no Render (https://render.com)
+# Acesse https://dashboard.render.com/blueprints e cole a URL deste repositório.
+# O serviço roda apenas a pasta "server" (rootDir). O banco continua no Neon.
+
+services:
+  - type: web
+    name: nagalli-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm ci || npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      # Defina os valores no painel do Render (não ficam neste arquivo).
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: NODE_VERSION
+        value: "20"
+      - key: PORT
+        value: "10000"

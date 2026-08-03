@@ -18,9 +18,10 @@ export function fmtPct(value: number): string {
   return `${value.toFixed(2)}%`;
 }
 
-export function fmtDate(dateStr: string): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
+export function fmtDate(dateStr: string | number): string {
+  if (dateStr === null || dateStr === undefined || dateStr === "") return "";
+  const d = typeof dateStr === "number" ? new Date(dateStr) : new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("pt-BR");
 }
 

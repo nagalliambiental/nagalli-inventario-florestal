@@ -13,12 +13,14 @@ import { getProject, listPlots, deletePlot, getProjectSummary, listTrees } from 
 import { colors } from "../constants/colors";
 import { fmtDate, methodLabel, fmtM2, fmtM3 } from "../utils/formats";
 import { sumTreeVolumes } from "../utils/calculations";
+import { useUser } from "../contexts/UserContext";
 import type { Plot, ProjectSummary, Tree } from "../types";
 import type { RootStackParamList } from "../types/navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Project">;
 
 export function ProjectScreen({ route, navigation }: Props) {
+  const { isAdmin } = useUser();
   const { projectId } = route.params;
   const [project, setProject] = useState<any>(null);
   const [plots, setPlots] = useState<Plot[]>([]);
@@ -41,7 +43,14 @@ export function ProjectScreen({ route, navigation }: Props) {
     }, [projectId])
   );
 
-  const handleDeletePlot = (id: number, code: string) => {
+  const handleDeletePlot = (id: string, code: string) => {
+    if (!isAdmin) {
+      Alert.alert(
+        "Acesso restrito",
+        "Somente o administrador pode excluir parcelas."
+      );
+      return;
+    }
     Alert.alert("Excluir parcela", `Excluir "${code}"?`, [
       { text: "Cancelar", style: "cancel" },
       { text: "Excluir", style: "destructive", onPress: () => deletePlot(id).then(() => listPlots(projectId).then(setPlots)) },
@@ -54,6 +63,17 @@ export function ProjectScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.projectName} numberOfLines={1}>
+          {project.name}
+        </Text>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("ProjectForm", { projectId })}
+          style={styles.editBtn}
+        >
+          <Text style={styles.editText}>✏️ Editar</Text>
+        </TouchableOpacity>
+      </View>
       {summary && (
         <View style={styles.summary}>
           <View style={styles.statRow}>
@@ -119,6 +139,23 @@ function StatBox({ label, value, small }: { label: string; value: string; small?
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  projectName: { fontSize: 19, fontWeight: "700", color: colors.text, flex: 1, marginRight: 12 },
+  editBtn: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  editText: { color: colors.primary, fontWeight: "600", fontSize: 13 },
   summary: { padding: 16, paddingBottom: 0 },
   statRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
   statBox: {

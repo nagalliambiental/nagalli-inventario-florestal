@@ -2,12 +2,13 @@ import React, { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { View, Text, ActivityIndicator, StyleSheet, AppState } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { initDatabase } from "./src/db/database";
 import { seedSpecies } from "./src/db/seed";
 import * as SQLite from "expo-sqlite";
 import { colors } from "./src/constants/colors";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
+import { UserProvider, useUser } from "./src/contexts/UserContext";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { ProjectFormScreen } from "./src/screens/ProjectFormScreen";
 import { ProjectScreen } from "./src/screens/ProjectScreen";
@@ -16,18 +17,16 @@ import { PlotScreen } from "./src/screens/PlotScreen";
 import { TreeFormScreen } from "./src/screens/TreeFormScreen";
 import { ReportScreen } from "./src/screens/ReportScreen";
 import { PinScreen } from "./src/screens/PinScreen";
-import { LockScreen } from "./src/screens/LockScreen";
+import { LoginScreen } from "./src/screens/LoginScreen";
 import type { RootStackParamList } from "./src/types/navigation";
-import { isPinSet } from "./src/utils/auth";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function AppContent() {
   const { colors } = useTheme();
+  const { locked, ready: authReady } = useUser();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [locked, setLocked] = useState(false);
-  const [lockReady, setLockReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,26 +36,12 @@ function AppContent() {
         if (cancelled) return;
         await seedSpecies(db);
         if (cancelled) return;
-        setLocked(await isPinSet());
-        if (cancelled) return;
-        setLockReady(true);
         setReady(true);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || String(e) || "Erro ao inicializar");
       }
     })();
     return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state !== "active") {
-        isPinSet().then((set) => {
-          if (set) setLocked(true);
-        });
-      }
-    });
-    return () => sub.remove();
   }, []);
 
   if (error) {
@@ -67,19 +52,17 @@ function AppContent() {
     );
   }
 
-  if (!ready) {
+  if (!ready || !authReady) {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loading, { color: colors.textSecondary }]}>{error || "Inicializando..."}</Text>
+        <Text style={[styles.loading, { color: colors.textSecondary }]}>Inicializando...</Text>
       </View>
     );
   }
 
-  if (locked && lockReady) {
-    return (
-      <LockScreen onUnlock={() => setLocked(false)} />
-    );
+  if (locked) {
+    return <LoginScreen />;
   }
 
   return (
@@ -99,7 +82,7 @@ function AppContent() {
         <Stack.Screen name="Plot" component={PlotScreen} options={{ title: "Parcela" }} />
         <Stack.Screen name="TreeForm" component={TreeFormScreen} options={({ route }) => ({ title: route.params?.treeId ? "Editar árvore" : "Nova árvore" })} />
         <Stack.Screen name="Report" component={ReportScreen} options={{ title: "Relatórios" }} />
-        <Stack.Screen name="Pin" component={PinScreen} options={{ title: "Segurança" }} />
+        <Stack.Screen name="Users" component={PinScreen} options={{ title: "Acesso e usuários" }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -108,7 +91,9 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <UserProvider>
+        <AppContent />
+      </UserProvider>
     </ThemeProvider>
   );
 }

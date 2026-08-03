@@ -561,7 +561,7 @@ export async function exportProjectImages(
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
 
-  const plotByTree: Record<number, Plot> = {};
+  const plotByTree: Record<string, Plot> = {};
   plots.forEach((p) => {
     plotByTree[p.id] = p;
   });

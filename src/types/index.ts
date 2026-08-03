@@ -1,12 +1,13 @@
 export interface Project {
-  id: number;
+  id: string;
   name: string;
   client: string;
   location: string;
   method: SurveyMethod;
   areaHa: number;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number;
 }
 
 export type SurveyMethod =
@@ -16,19 +17,21 @@ export type SurveyMethod =
   | "arvores_isoladas";
 
 export interface Plot {
-  id: number;
-  projectId: number;
+  id: string;
+  projectId: string;
   code: string;
   areaM2: number;
   shape: string;
   coordinates: string;
   notes: string;
-  createdAt: string;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number;
 }
 
 export interface Tree {
-  id: number;
-  plotId: number;
+  id: string;
+  plotId: string;
   number: number;
   speciesId: number | null;
   speciesName: string;
@@ -45,27 +48,35 @@ export interface Tree {
   latitude: number;
   longitude: number;
   measuredAt: string;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number;
   fustes: Stem[];
   photos: TreePhoto[];
 }
 
 export interface TreePhoto {
-  id: number;
-  treeId: number;
+  id: string;
+  treeId: string;
   uri: string;
   caption: string;
-  createdAt: string;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number;
 }
 
 export interface Stem {
-  id: number;
-  treeId: number;
+  id: string;
+  treeId: string;
   number: number;
   capCm: number;
   heightComercialM: number;
   heightTotalM: number;
   dbhCm: number;
   basalAreaM2: number;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number;
 }
 
 export interface Species {

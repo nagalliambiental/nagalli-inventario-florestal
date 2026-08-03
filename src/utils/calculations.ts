@@ -165,7 +165,7 @@ export function calcIVI(trees: Tree[]): {
 
   const bySpecies: Record<
     string,
-    { n: number; basal: number; plots: Set<number> }
+    { n: number; basal: number; plots: Set<string> }
   > = {};
 
   trees.forEach((t) => {

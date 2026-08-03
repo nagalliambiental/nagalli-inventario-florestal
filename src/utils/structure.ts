@@ -7,7 +7,7 @@ export interface SpeciesCount {
 }
 
 export interface PlotStructure {
-  plotId: number;
+  plotId: string;
   plotCode: string;
   treeCount: number;
   speciesCount: number;
@@ -29,12 +29,12 @@ export function calcHorizontalStructure(
   plots: Plot[],
   trees: Tree[]
 ): PlotStructure[] {
-  const codeById: Record<number, string> = {};
+  const codeById: Record<string, string> = {};
   plots.forEach((p) => {
     codeById[p.id] = p.code;
   });
 
-  const byPlot: Record<number, { basal: number; species: Record<string, number> }> = {};
+  const byPlot: Record<string, { basal: number; species: Record<string, number> }> = {};
   trees.forEach((t) => {
     if (!byPlot[t.plotId]) byPlot[t.plotId] = { basal: 0, species: {} };
     byPlot[t.plotId].basal += t.basalAreaM2;
@@ -47,8 +47,8 @@ export function calcHorizontalStructure(
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
     return {
-      plotId: Number(pid),
-      plotCode: codeById[Number(pid)] || `P${pid}`,
+      plotId: pid,
+      plotCode: codeById[pid] || `P${pid}`,
       treeCount: species.reduce((s, x) => s + x.count, 0),
       speciesCount: species.length,
       basalAreaM2: data.basal,

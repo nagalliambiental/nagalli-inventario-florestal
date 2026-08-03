@@ -10,23 +10,49 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
-import { listProjects, deleteProject, getProject } from "../db/database";
+import { listProjects, getProject } from "../db/database";
 import { colors } from "../constants/colors";
 import { fmtDate, methodLabel } from "../utils/formats";
 import { importProjectBackup, importExcelData } from "../utils/backup";
+import { syncNow } from "../utils/sync";
+import { useUser } from "../contexts/UserContext";
 import type { Project } from "../types";
 import type { RootStackParamList } from "../types/navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home">;
 
 export function HomeScreen({ navigation }: Props) {
+  const { user, isAdmin, logout, token } = useUser();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       listProjects().then(setProjects);
     }, [])
   );
+
+  const handleSync = async () => {
+    if (!token || syncing) return;
+    setSyncing(true);
+    try {
+      const r = await syncNow(token);
+      listProjects().then(setProjects);
+      Alert.alert(
+        "Sincronizado",
+        r.pushed === 0 && r.pulled === 0
+          ? "Tudo em dia."
+          : `Enviados ${r.pushed} e baixados ${r.pulled} registros.`
+      );
+    } catch (e: any) {
+      Alert.alert(
+        "Falha na sincronização",
+        e?.message || "Sem conexão com o servidor. Tente novamente quando tiver sinal."
+      );
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const openImport = () => {
     Alert.alert("Importar dados", "O que você quer importar?", [
@@ -56,7 +82,7 @@ export function HomeScreen({ navigation }: Props) {
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
-      let newId: number;
+      let newId: string;
       if (kind === "backup") {
         newId = await importProjectBackup(asset.uri);
       } else {
@@ -75,29 +101,55 @@ export function HomeScreen({ navigation }: Props) {
     }
   };
 
-  const handleDelete = (id: number, name: string) => {
-    Alert.alert("Excluir projeto", `Excluir "${name}"?`, [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Excluir", style: "destructive", onPress: () => deleteProject(id).then(() => listProjects().then(setProjects)) },
-    ]);
-  };
+  const renderItem = ({ item }: { item: Project }) => (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => navigation.navigate("Project", { projectId: item.id })}
+      onLongPress={() =>
+        navigation.navigate("ProjectForm", { projectId: item.id })
+      }
+    >
+      <Text style={styles.cardTitle}>{item.name}</Text>
+      {item.client ? <Text style={styles.cardSub}>{item.client}</Text> : null}
+      <Text style={styles.cardMeta}>
+        {methodLabel(item.method)} • {item.areaHa} ha
+      </Text>
+      <Text style={styles.cardDate}>{fmtDate(item.createdAt)}</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
       <View style={styles.toolbar}>
         <TouchableOpacity
-          style={styles.toolBtn}
-          onPress={openImport}
+          style={[styles.toolBtn, styles.syncBtn]}
+          onPress={handleSync}
+          disabled={syncing}
         >
-          <Text style={styles.toolText}>📥 Importar</Text>
+          <Text style={styles.toolText}>
+            {syncing ? "⏳ Sincronizando..." : "🔄 Sincronizar"}
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.toolBtn}
-          onPress={() => navigation.navigate("Pin")}
-        >
-          <Text style={styles.toolText}>🔒 Segurança</Text>
+        <TouchableOpacity style={styles.toolBtn} onPress={logout}>
+          <Text style={styles.toolText}>🚪 Sair</Text>
         </TouchableOpacity>
       </View>
+      {isAdmin ? (
+        <View style={styles.toolbar}>
+          <TouchableOpacity style={styles.toolBtn} onPress={openImport}>
+            <Text style={styles.toolText}>📥 Importar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolBtn}
+            onPress={() => navigation.navigate("Users")}
+          >
+            <Text style={styles.toolText}>👥 Usuários</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      {user && !isAdmin && (
+        <Text style={styles.userName}>Olá, {user.name}</Text>
+      )}
       <FlatList
         data={projects}
         keyExtractor={(i) => String(i.id)}
@@ -105,20 +157,7 @@ export function HomeScreen({ navigation }: Props) {
         ListEmptyComponent={
           <Text style={styles.empty}>Nenhum projeto ainda</Text>
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate("Project", { projectId: item.id })}
-            onLongPress={() => handleDelete(item.id, item.name)}
-          >
-            <Text style={styles.cardTitle}>{item.name}</Text>
-            {item.client ? <Text style={styles.cardSub}>{item.client}</Text> : null}
-            <Text style={styles.cardMeta}>
-              {methodLabel(item.method)} • {item.areaHa} ha
-            </Text>
-            <Text style={styles.cardDate}>{fmtDate(item.createdAt)}</Text>
-          </TouchableOpacity>
-        )}
+        renderItem={renderItem}
       />
       <TouchableOpacity
         style={styles.fab}
@@ -138,6 +177,12 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     gap: 12,
   },
+  userName: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
   toolBtn: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -147,6 +192,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
   },
+  syncBtn: { borderColor: colors.primary },
   toolText: { color: colors.primary, fontWeight: "600", fontSize: 14 },
   list: { padding: 16, paddingBottom: 80 },
   empty: { textAlign: "center", color: colors.textLight, marginTop: 60, fontSize: 16 },

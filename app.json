@@ -43,7 +43,8 @@
           "savePhotosPermission": "Permite ao Nagalli Ambiental salvar as fotos do inventário na galeria do celular.",
           "isAccessMediaLocationEnabled": false
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

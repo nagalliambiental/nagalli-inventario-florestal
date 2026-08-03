@@ -82,7 +82,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
   const [phytosanitary, setPhytosanitary] = useState("");
   const [notes, setNotes] = useState("");
   const [photoUri, setPhotoUri] = useState("");
-  const [photos, setPhotos] = useState<{ id?: number; uri: string }[]>([]);
+  const [photos, setPhotos] = useState<{ id?: string; uri: string }[]>([]);
   const [isTree, setIsTree] = useState(true);
   const [latitude, setLatitude] = useState(0);
   const [longitude, setLongitude] = useState(0);
@@ -186,7 +186,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
           setNotes(t.notes || "");
           setPhotoUri(t.photoUri || "");
           setIsTree(t.isTree !== false);
-          const saved: { id?: number; uri: string }[] = (t.photos || []).map((p) => ({ id: p.id, uri: p.uri }));
+          const saved: { id?: string; uri: string }[] = (t.photos || []).map((p) => ({ id: p.id, uri: p.uri }));
           if (saved.length === 0 && t.photoUri) {
             saved.push({ uri: t.photoUri });
           }
@@ -370,15 +370,15 @@ export function TreeFormScreen({ route, navigation }: Props) {
       return;
     }
 
-    const syncPhotos = async (treeIdNum: number) => {
-      const current = await listTreePhotos(treeIdNum);
+    const syncPhotos = async (treeIdStr: string) => {
+      const current = await listTreePhotos(treeIdStr);
       const kept = new Set(photos.filter((p) => p.id != null).map((p) => p.id!));
       for (const sp of current) {
         if (!kept.has(sp.id)) await deleteTreePhoto(sp.id);
       }
       for (const p of photos) {
         if (p.id == null) {
-          await addTreePhoto(treeIdNum, p.uri, `${isTree ? "Árvore" : "Indivíduo"} #${number || "?"}`);
+          await addTreePhoto(treeIdStr, p.uri, `${isTree ? "Árvore" : "Indivíduo"} #${number || "?"}`);
         }
       }
     };

@@ -75,7 +75,7 @@ const sanitizeFileName = (name: string): string =>
 
 // Gera o backup completo do projeto (dados + fotos) em um único .zip
 // para ser enviado a outro celular que tenha o app instalado.
-export async function exportProjectBackup(projectId: number): Promise<boolean> {
+export async function exportProjectBackup(projectId: string): Promise<boolean> {
   const project = await getProject(projectId);
   if (!project) return false;
 
@@ -192,7 +192,7 @@ export async function exportProjectBackup(projectId: number): Promise<boolean> {
 
 // Restaura um projeto inteiro (dados + fotos) a partir de um .zip de backup.
 // Retorna o id do novo projeto criado no aparelho de destino.
-export async function importProjectBackup(uri: string): Promise<number> {
+export async function importProjectBackup(uri: string): Promise<string> {
   const JSZip = (await import("jszip")).default;
   const b64 = await FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
@@ -376,7 +376,7 @@ function resolveSpecies(
 
 // Importa os dados da planilha de campo (modelo "Árvores" do app) criando um
 // novo projeto com parcelas e árvores. Retorna o id do projeto criado.
-export async function importExcelData(uri: string, baseName: string): Promise<number> {
+export async function importExcelData(uri: string, baseName: string): Promise<string> {
   const XLSX = await import("xlsx");
   const b64 = await FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
@@ -425,7 +425,7 @@ export async function importExcelData(uri: string, baseName: string): Promise<nu
     areaHa: 0,
   });
 
-  const plotsByCode = new Map<string, number>();
+  const plotsByCode = new Map<string, string>();
   let treeCount = 0;
 
   for (let r = headerRow + 1; r < rows.length; r++) {
