@@ -1,6 +1,6 @@
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import type { Species } from "../types";
+import type { Species, Tree } from "../types";
 import {
   getProject,
   listPlots,
@@ -11,6 +11,7 @@ import {
   createTree,
   addTreePhoto,
 } from "../db/database";
+import { buildKmlString, buildXlsxBase64, listProjectImageFiles } from "./export";
 import { PHOTOS_DIR } from "./photos";
 
 const FORMAT = "nagalli-project-backup";
@@ -73,8 +74,8 @@ interface BackupManifest {
 const sanitizeFileName = (name: string): string =>
   name.replace(/[\\/:*?"<>|]/g, "_").trim() || "projeto";
 
-// Gera o backup completo do projeto (dados + fotos) em um único .zip
-// para ser enviado a outro celular que tenha o app instalado.
+// Gera o backup completo do projeto em um único .zip: dados para reimportação
+// (manifest.json + fotos), relatório Excel e mapa KML.
 export async function exportProjectBackup(projectId: string): Promise<boolean> {
   const project = await getProject(projectId);
   if (!project) return false;
@@ -83,6 +84,11 @@ export async function exportProjectBackup(projectId: string): Promise<boolean> {
   const zip = new JSZip();
 
   const plots = await listPlots(projectId);
+  const allTrees: Tree[] = [];
+  for (const plot of plots) {
+    allTrees.push(...(await listTrees(plot.id)));
+  }
+
   const manifest: BackupManifest = {
     format: FORMAT,
     version: VERSION,
@@ -97,34 +103,25 @@ export async function exportProjectBackup(projectId: string): Promise<boolean> {
     plots: [],
   };
 
-  let photoIndex = 0;
-  const extOf = (uri: string) => (uri.toLowerCase().endsWith(".png") ? ".png" : ".jpg");
+  // Fotos com nomes legíveis (PROJETO_PARCELA_NUMEROARVORE) dentro de IMAGENS/.
+  const imageFiles = await listProjectImageFiles(project, plots, allTrees);
+  const imagesByTree = new Map<string, typeof imageFiles>();
+  for (const f of imageFiles) {
+    const arr = imagesByTree.get(f.treeUuid) || [];
+    arr.push(f);
+    imagesByTree.set(f.treeUuid, arr);
+  }
+  for (const f of imageFiles) {
+    zip.file(`IMAGENS/${f.name}`, f.base64, { base64: true });
+  }
 
   for (const plot of plots) {
-    const trees = await listTrees(plot.id);
+    const trees = allTrees.filter((t) => t.plotId === plot.id);
     const backupTrees: BackupTree[] = [];
     for (const t of trees) {
-      const photoRefs: BackupTreePhoto[] = [];
-      const photoUris: string[] = [];
-      if (t.photos && t.photos.length > 0) {
-        photoUris.push(...t.photos.map((p) => p.uri));
-      } else if (t.photoUri) {
-        photoUris.push(t.photoUri);
-      }
-
-      const photoCaptions = new Map<string, string>();
-      (t.photos || []).forEach((p) => photoCaptions.set(p.uri, p.caption || ""));
-
-      for (const uri of photoUris) {
-        const ref = `photos/${photoIndex++}${extOf(uri)}`;
-        try {
-          const b64 = await FileSystem.readAsStringAsync(uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          zip.file(ref, b64, { base64: true });
-          photoRefs.push({ ref, caption: photoCaptions.get(uri) || "" });
-        } catch {}
-      }
+      const photoRefs: BackupTreePhoto[] = (imagesByTree.get(t.id) || []).map(
+        (f) => ({ ref: `IMAGENS/${f.name}`, caption: f.caption })
+      );
 
       backupTrees.push({
         number: t.number,
@@ -164,14 +161,29 @@ export async function exportProjectBackup(projectId: string): Promise<boolean> {
 
   zip.file("manifest.json", JSON.stringify(manifest, null, 2));
 
+  // Relatório Excel completo e mapa KML embutidos no backup.
+  const species = await listSpecies();
+  const xlsxB64 = await buildXlsxBase64(project, plots, allTrees, species);
+  zip.file("RELATORIO.xlsx", xlsxB64, { base64: true });
+  const kml = buildKmlString(project, plots, allTrees);
+  zip.file(`${sanitizeFileName(project.name)}.kml`, kml);
+
   const readme = [
     "NAGALLI AMBIENTAL — BACKUP DE PROJETO",
     "",
     `Projeto: ${project.name}`,
     `Exportado em: ${manifest.exportedAt}`,
     `Parcelas: ${manifest.plots.length}`,
+    `Árvores: ${allTrees.length}`,
+    `Imagens: ${imageFiles.length}`,
     "",
-    "Este arquivo pode ser importado em outro aparelho com o app:",
+    "Conteúdo deste arquivo:",
+    "  - manifest.json ....... dados para reimportação no app",
+    "  - IMAGENS/ ............ fotos do projeto",
+    "  - RELATORIO.xlsx ...... relatório em Excel",
+    `  - ${sanitizeFileName(project.name)}.kml ........ mapa em KML (Google Earth)`,
+    "",
+    "Para importar em outro aparelho com o app:",
     "Tela inicial → Importar → Backup do projeto (.zip)",
     "",
     "© Nagalli Ambiental Ltda. Direitos reservados. Proibida a cópia e/ou",

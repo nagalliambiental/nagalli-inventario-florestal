@@ -47,12 +47,13 @@ function sanitizeFileName(name: string): string {
     .replace(/_+/g, "_");
 }
 
-export async function exportXlsx(
+// Gera o relatório Excel em base64 (usado tanto no botão Excel quanto no backup).
+export async function buildXlsxBase64(
   project: Project,
   plots: Plot[],
   trees: Tree[],
   species: Species[]
-) {
+): Promise<string> {
   const XLSX = await import("xlsx");
 
   const methodLabel = METHOD_LABEL[project.method] || project.method;
@@ -538,6 +539,17 @@ export async function exportXlsx(
   };
 
   const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+  return wbout;
+}
+
+// Exporta o relatório Excel e abre a folha de compartilhamento.
+export async function exportXlsx(
+  project: Project,
+  plots: Plot[],
+  trees: Tree[],
+  species: Species[]
+) {
+  const wbout = await buildXlsxBase64(project, plots, trees, species);
   const uri =
     FileSystem.documentDirectory +
     `${project.name.replace(/[\\/:*?"<>|]/g, "_")}.xlsx`;
@@ -548,6 +560,45 @@ export async function exportXlsx(
     mimeType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
+}
+
+// Lista as fotos do projeto com nomes legíveis (PROJETO_PARCELA_NUMEROARVORE)
+// e conteúdo em base64. Usado tanto no botão Imagens quanto no backup completo.
+export async function listProjectImageFiles(
+  project: Project,
+  plots: Plot[],
+  trees: Tree[]
+): Promise<{ name: string; base64: string; caption: string; treeUuid: string }[]> {
+  const plotByTree: Record<string, Plot> = {};
+  plots.forEach((p) => {
+    plotByTree[p.id] = p;
+  });
+
+  const projectName = sanitizeFileName(project.name);
+  const files: { name: string; base64: string; caption: string; treeUuid: string }[] = [];
+
+  for (const t of trees) {
+    const plotCode = sanitizeFileName(plotByTree[t.plotId]?.code || `P${t.plotId}`);
+    const photoUris: { uri: string; caption: string }[] = [];
+    if (t.photos && t.photos.length > 0) {
+      photoUris.push(...t.photos.map((p) => ({ uri: p.uri, caption: p.caption || "" })));
+    } else if (t.photoUri) {
+      photoUris.push({ uri: t.photoUri, caption: "" });
+    }
+    const base = `${projectName}_${plotCode}_${String(t.number).padStart(3, "0")}`;
+    for (let i = 0; i < photoUris.length; i++) {
+      const uri = photoUris[i].uri;
+      const ext = uri.toLowerCase().endsWith(".png") ? "png" : "jpg";
+      const name = `${base}${photoUris.length > 1 ? `_${i + 1}` : ""}.${ext}`;
+      try {
+        const b64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        files.push({ name, base64: b64, caption: photoUris[i].caption, treeUuid: t.id });
+      } catch {}
+    }
+  }
+  return files;
 }
 
 // Exporta as fotos do projeto em um arquivo ZIP, nomeadas como
@@ -561,10 +612,8 @@ export async function exportProjectImages(
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
 
-  const plotByTree: Record<string, Plot> = {};
-  plots.forEach((p) => {
-    plotByTree[p.id] = p;
-  });
+  const files = await listProjectImageFiles(project, plots, trees);
+  if (files.length === 0) return false;
 
   const projectName = sanitizeFileName(project.name);
   const readme: string[] = [
@@ -578,36 +627,12 @@ export async function exportProjectImages(
     "",
   ];
 
-  let total = 0;
-  for (const t of trees) {
-    const plotCode = sanitizeFileName(plotByTree[t.plotId]?.code || `P${t.plotId}`);
-    const photoUris: string[] = [];
-    if (t.photos && t.photos.length > 0) {
-      photoUris.push(...t.photos.map((p) => p.uri));
-    } else if (t.photoUri) {
-      photoUris.push(t.photoUri);
-    }
-    const base = `${projectName}_${plotCode}_${String(t.number).padStart(3, "0")}`;
-    for (let i = 0; i < photoUris.length; i++) {
-      const uri = photoUris[i];
-      const ext = uri.toLowerCase().endsWith(".png") ? "png" : "jpg";
-      const name = `${base}${photoUris.length > 1 ? `_${i + 1}` : ""}.${ext}`;
-      try {
-        const b64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        zip.file(name, b64, { base64: true });
-        readme.push(
-          `${name}  →  Árvore #${t.number} — ${t.speciesName || "N/I"} (Parcela ${plotByTree[t.plotId]?.code || t.plotId})`
-        );
-        total++;
-      } catch {}
-    }
+  for (const f of files) {
+    zip.file(f.name, f.base64, { base64: true });
+    readme.push(f.name);
   }
 
-  if (total === 0) return false;
-
-  readme.push("", `Total de imagens: ${total}`);
+  readme.push("", `Total de imagens: ${files.length}`);
   zip.file("README.txt", readme.join("\n"));
 
   const b64 = await zip.generateAsync({
@@ -623,12 +648,13 @@ export async function exportProjectImages(
   return true;
 }
 
-export async function exportKml(
+// Gera o conteúdo do arquivo KML (usado tanto no botão KML quanto no backup).
+export function buildKmlString(
   project: Project,
   plots: Plot[],
   trees: Tree[]
-) {
-  const kml = `<?xml version="1.0" encoding="UTF-8"?>
+): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>NAGALLI AMBIENTAL — ${project.name}</name>
@@ -646,7 +672,14 @@ export async function exportKml(
       .join("")}
   </Document>
 </kml>`;
+}
 
+export async function exportKml(
+  project: Project,
+  plots: Plot[],
+  trees: Tree[]
+) {
+  const kml = buildKmlString(project, plots, trees);
   const uri =
     FileSystem.documentDirectory +
     `${project.name.replace(/[\\/:*?"<>|]/g, "_")}.kml`;

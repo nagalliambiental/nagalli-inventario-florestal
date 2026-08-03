@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Share,
   Alert,
   Image,
 } from "react-native";
@@ -98,38 +97,6 @@ export function ReportScreen({ route }: Props) {
   const conama = calcConama(treeTrees, species, areaHa || 1);
   const floristic = calcFloristic(trees, species);
   const threatened = floristic.filter((f) => f.threatened);
-
-  const handleShare = async () => {
-    const lines = [
-      `NAGALLI AMBIENTAL — Inventário Florestal`,
-      `Projeto: ${project.name}`,
-      `Cliente: ${project.client || "—"}`,
-      `Local: ${project.location || "—"}`,
-      `Método: ${project.method}`,
-      `Área: ${project.areaHa} ha`,
-      "",
-      `Total de árvores: ${treeTrees.length}`,
-      `Total de espécies: ${results.speciesCount}`,
-      `Área basal total: ${fmtM2(results.basalAreaTotal)}`,
-      `Volume total: ${fmtM3(results.volumeTotal)}`,
-      `DAP médio: ${fmtCm(results.avgDbh)}`,
-      `Altura média: ${fmtM(results.avgHeight)}`,
-      `Shannon (H'): ${shannon.toFixed(3)}`,
-      `Pielou (J'): ${pielou.toFixed(3)}`,
-      "",
-      "IVI - Índice de Valor de Importância:",
-      ...ivi.map(
-        (s, i) =>
-          `${i + 1}. ${s.speciesName}: IVI=${s.ivi.toFixed(2)} (Dens=${fmtPct(s.density)}, Dom=${fmtPct(s.dominance)}, Freq=${fmtPct(s.frequency)})`
-      ),
-      "",
-      "© Nagalli Ambiental Ltda. Direitos reservados.",
-      "Proibida a cópia e/ou distribuição total ou parcial, por qualquer meio, inclusive por ferramentas de Inteligência Artificial (Lei nº 9.610/98 e Lei nº 13.709/18).",
-    ];
-    try {
-      await Share.share({ message: lines.join("\n") });
-    } catch {}
-  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -588,10 +555,6 @@ export function ReportScreen({ route }: Props) {
       >
         <Text style={styles.backupText}>💾 Exportar projeto completo (backup)</Text>
       </TouchableOpacity>
-
-      <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
-        <Text style={styles.shareText}>Compartilhar</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -849,14 +812,6 @@ function useStyles(colors: any) {
           marginBottom: 12,
         },
         backupText: { color: colors.white, fontSize: 15, fontWeight: "700" },
-        shareBtn: {
-          backgroundColor: colors.primary,
-          borderRadius: 10,
-          padding: 16,
-          alignItems: "center",
-          marginTop: 8,
-        },
-        shareText: { color: colors.white, fontSize: 16, fontWeight: "700" },
       }),
     [colors]
   );
