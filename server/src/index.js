@@ -10,6 +10,18 @@ app.use(cors());
 // Limite alto para aceitar fotos em base64 no sync.
 app.use(express.json({ limit: "150mb" }));
 
+app.get("/", (_req, res) =>
+  res.json({
+    service: "NAGALLI API",
+    status: "ok",
+    health: "/health",
+    endpoints: {
+      auth: ["POST /auth/register", "POST /auth/login", "GET /auth/me", "GET /auth/bootstrap", "GET /auth/users", "DELETE /auth/users/:uuid"],
+      sync: ["POST /sync/push", "GET /sync/pull?since=<ISO>"],
+    },
+  })
+);
+
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/auth", authRouter);
