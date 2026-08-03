@@ -2,21 +2,21 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
 import pool from "../db.js";
-import { signToken, requireAuth, requireAdmin } from "../auth.js";
+import { signToken, requireAuth, requireAdmin, resolveUser } from "../auth.js";
 
 const router = Router();
 
 // POST /auth/register
 // Cria uma conta. O PRIMEIRO usuario registrado vira administrador (bootstrap).
-// Depois disso, so administradores podem criar contas.
+// Depois disso, so administradores podem criar contas (token obrigatorio).
 router.post("/register", async (req, res) => {
   try {
+    req.user = resolveUser(req);
     const { email, password, name, role } = req.body || {};
     if (!email || !password || !name) {
       return res.status(400).json({ error: "email, password e name sao obrigatorios." });
     }
     const normalizedEmail = String(email).trim().toLowerCase();
-    const isAdmin = (req.user && req.user.role === "admin") || role === "admin";
 
     const { rows } = await pool.query("SELECT COUNT(*) AS n FROM users");
     const userCount = Number(rows[0].n);
@@ -32,7 +32,9 @@ router.post("/register", async (req, res) => {
       return res.status(409).json({ error: "Ja existe uma conta com este email." });
     }
 
-    const finalRole = userCount === 0 ? "admin" : isAdmin ? "admin" : "worker";
+    // O primeiro usuário vira administrador (bootstrap). Depois, respeita o papel
+    // pedido (somente admins chegam aqui, então "admin" é permitido).
+    const finalRole = userCount === 0 ? "admin" : role === "admin" ? "admin" : "worker";
     const hash = await bcrypt.hash(String(password), 10);
     const uuid = randomUUID();
     await pool.query(
@@ -115,6 +117,28 @@ router.get("/users", requireAuth, requireAdmin, async (_req, res) => {
     return res.json({ users: rows });
   } catch (e) {
     console.error("list users error", e);
+    return res.status(500).json({ error: "Erro interno." });
+  }
+});
+
+// PUT /auth/users/:uuid/password — admin redefine a senha de qualquer usuário
+router.put("/users/:uuid/password", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { newPassword } = req.body || {};
+    if (!newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({ error: "A nova senha precisa de pelo menos 6 caracteres." });
+    }
+    const hash = await bcrypt.hash(String(newPassword), 10);
+    const result = await pool.query(
+      "UPDATE users SET password_hash = $1 WHERE uuid = $2",
+      [hash, req.params.uuid]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Usuario nao encontrado." });
+    }
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("reset password error", e);
     return res.status(500).json({ error: "Erro interno." });
   }
 });

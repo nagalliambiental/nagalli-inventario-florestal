@@ -8,10 +8,11 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { colors } from "../constants/colors";
 import { useUser } from "../contexts/UserContext";
-import { apiListUsers, apiRegister, apiDeleteUser } from "../api/auth";
+import { apiListUsers, apiRegister, apiDeleteUser, apiAdminResetPassword } from "../api/auth";
 import { useFocusEffect } from "@react-navigation/native";
 
 interface Account {
@@ -32,6 +33,12 @@ export function PinScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"worker" | "admin">("worker");
+
+  // Redefinição de senha
+  const [resetTarget, setResetTarget] = useState<Account | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -91,9 +98,39 @@ export function PinScreen() {
     ]);
   };
 
+  const openReset = (acc: Account) => {
+    setResetTarget(acc);
+    setResetPassword("");
+    setResetConfirm("");
+  };
+
+  const resetPasswordNow = async () => {
+    if (!resetTarget) return;
+    if (resetPassword.length < 6) {
+      Alert.alert("Erro", "A nova senha precisa de pelo menos 6 caracteres.");
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      Alert.alert("Erro", "A confirmação não confere.");
+      return;
+    }
+    if (!token) return;
+    setResetBusy(true);
+    try {
+      await apiAdminResetPassword(token, resetTarget.uuid, resetPassword);
+      Alert.alert("OK", `Senha de "${resetTarget.name}" alterada.`);
+      setResetTarget(null);
+    } catch (e: any) {
+      Alert.alert("Erro", e?.message || "Não foi possível alterar a senha.");
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
   if (!isAdmin) return null;
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Administração de contas</Text>
       <Text style={styles.hint}>
@@ -123,6 +160,12 @@ export function PinScreen() {
                 {a.email} • {a.role === "admin" ? "Administrador" : "Funcionário"}
               </Text>
             </View>
+            <TouchableOpacity
+              style={[styles.smallBtn, { borderColor: colors.primary }]}
+              onPress={() => openReset(a)}
+            >
+              <Text style={[styles.smallBtnText, { color: colors.primary }]}>Senha</Text>
+            </TouchableOpacity>
             {a.uuid !== me?.uuid && (
               <TouchableOpacity
                 style={[styles.smallBtn, { borderColor: colors.error }]}
@@ -184,6 +227,62 @@ export function PinScreen() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+
+    <Modal
+      visible={!!resetTarget}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setResetTarget(null)}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Redefinir senha</Text>
+          <Text style={styles.modalSub}>
+            Nova senha para {resetTarget?.name} ({resetTarget?.email})
+          </Text>
+          <Text style={styles.label}>Nova senha</Text>
+          <TextInput
+            style={styles.input}
+            value={resetPassword}
+            onChangeText={setResetPassword}
+            placeholder="Mínimo 6 caracteres"
+            placeholderTextColor={colors.textLight}
+            secureTextEntry
+            autoFocus
+          />
+          <Text style={styles.label}>Confirmar nova senha</Text>
+          <TextInput
+            style={styles.input}
+            value={resetConfirm}
+            onChangeText={setResetConfirm}
+            placeholder="Repita a nova senha"
+            placeholderTextColor={colors.textLight}
+            secureTextEntry
+          />
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+              onPress={() => setResetTarget(null)}
+              disabled={resetBusy}
+            >
+              <Text style={[styles.modalBtnText, { color: colors.textSecondary }]}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: colors.primary }]}
+              onPress={resetPasswordNow}
+              disabled={resetBusy}
+            >
+              {resetBusy ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.modalBtnText}>Salvar</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+    </View>
   );
 }
 
@@ -258,4 +357,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryBtnText: { color: colors.white, fontWeight: "700", fontSize: 15 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 20,
+  },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: colors.text },
+  modalSub: { fontSize: 13, color: colors.textSecondary, marginTop: 4, marginBottom: 8 },
+  modalActions: { flexDirection: "row", gap: 10, marginTop: 18 },
+  modalBtn: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  modalBtnText: { color: colors.white, fontWeight: "700", fontSize: 15 },
 });

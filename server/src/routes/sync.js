@@ -20,8 +20,9 @@ const fromDb = (v) => {
 
 // Upsert por linha com resolução "last-writer-wins" baseada em updated_at.
 // Um registro com deleted_at preenchido é um tombstone (marca a exclusão).
-async function upsert(table, cols, records) {
+async function upsert(syncKey, cols, records) {
   if (!Array.isArray(records) || records.length === 0) return 0;
+  const table = TABLE_NAMES[syncKey];
   let count = 0;
   for (const r of records) {
     const values = cols.map((c) => (TS_COLS.has(c) ? toDb(r[c]) : r[c] ?? null));
@@ -66,6 +67,16 @@ const TABLES = {
   ],
 };
 
+// Nome real da tabela no banco. As fotos ficam em "tree_photos" (a chave de
+// sync continua "photos" por compatibilidade com o app).
+const TABLE_NAMES = {
+  projects: "projects",
+  plots: "plots",
+  trees: "trees",
+  stems: "stems",
+  photos: "tree_photos",
+};
+
 // POST /sync/push
 // Envia as alterações locais do aparelho. Aceita arrays opcionais:
 // { projects?, plots?, trees?, stems?, photos? }
@@ -82,7 +93,6 @@ router.post("/push", async (req, res) => {
     return res.status(500).json({ error: "Erro interno ao enviar dados." });
   }
 });
-
 // GET /sync/pull?since=<ISO>
 // Retorna tudo que mudou depois de `since` (incluindo tombstones de exclusão).
 // Sem `since`, retorna o snapshot completo.
@@ -91,9 +101,10 @@ router.get("/pull", async (req, res) => {
     const since = req.query.since;
     const out = { since: since || null, now: Date.now() };
     for (const [key, cols] of Object.entries(TABLES)) {
+      const table = TABLE_NAMES[key];
       const sql = since
-        ? `SELECT ${cols.join(", ")} FROM ${key} WHERE updated_at > $1`
-        : `SELECT ${cols.join(", ")} FROM ${key}`;
+        ? `SELECT ${cols.join(", ")} FROM ${table} WHERE updated_at > $1::timestamptz`
+        : `SELECT ${cols.join(", ")} FROM ${table}`;
       const { rows } = since ? await pool.query(sql, [since]) : await pool.query(sql);
       out[key] = rows.map((r) => {
         const o = { ...r };

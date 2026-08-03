@@ -28,3 +28,15 @@ export function requireAdmin(req, res, next) {
   }
   return next();
 }
+
+// Lê o usuário do token (se houver) sem rejeitar quando não há token.
+// Usado em rotas que precisam ser acessíveis sem login (ex.: primeiro registro).
+export function resolveUser(req) {
+  const header = req.headers.authorization || "";
+  if (!header.startsWith("Bearer ")) return null;
+  try {
+    return jwt.verify(header.slice(7), process.env.JWT_SECRET);
+  } catch {
+    return null;
+  }
+}

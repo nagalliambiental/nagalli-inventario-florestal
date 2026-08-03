@@ -39,6 +39,14 @@ export async function apiDeleteUser(
   return apiFetch(`/auth/users/${uuid}`, { method: "DELETE", token });
 }
 
-export async function apiBootstrap(): Promise<{ users: number }> {
-  return apiFetch("/auth/bootstrap");
+export async function apiAdminResetPassword(
+  token: string,
+  uuid: string,
+  newPassword: string
+): Promise<{ ok: boolean }> {
+  return apiFetch(`/auth/users/${uuid}/password`, {
+    method: "PUT",
+    body: { newPassword },
+    token,
+  });
 }

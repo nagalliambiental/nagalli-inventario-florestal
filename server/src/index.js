@@ -16,7 +16,7 @@ app.get("/", (_req, res) =>
     status: "ok",
     health: "/health",
     endpoints: {
-      auth: ["POST /auth/register", "POST /auth/login", "GET /auth/me", "GET /auth/bootstrap", "GET /auth/users", "DELETE /auth/users/:uuid"],
+      auth: ["POST /auth/register", "POST /auth/login", "GET /auth/me", "GET /auth/bootstrap", "GET /auth/users", "PUT /auth/users/:uuid/password", "DELETE /auth/users/:uuid"],
       sync: ["POST /sync/push", "GET /sync/pull?since=<ISO>"],
     },
   })
