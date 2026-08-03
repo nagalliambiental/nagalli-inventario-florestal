@@ -12,16 +12,6 @@ import { PHOTOS_DIR, deletePhotoFile } from "./photos";
 
 const LAST_SYNC_KEY = "last_sync_at";
 
-// Nome da tabela local para cada chave de sincronização (o servidor chama a
-// tabela de fotos de "photos"; localmente ela é "tree_photos").
-const LOCAL_TABLE: Record<string, string> = {
-  projects: "projects",
-  plots: "plots",
-  trees: "trees",
-  stems: "stems",
-  photos: "tree_photos",
-};
-
 export interface SyncResult {
   pushed: number;
   pulled: number;
@@ -52,8 +42,7 @@ async function writePhotoData(uuid: string, data: string): Promise<string> {
 // Fotos: envia também o conteúdo (base64) para que fiquem disponíveis nos
 // outros aparelhos (o uri local é só um caminho de arquivo neste celular).
 async function rowsForPush(key: string, lastSync: number): Promise<any[]> {
-  const local = LOCAL_TABLE[key];
-  const rows = await listRowsForPush(local, lastSync);
+  const rows = await listRowsForPush(key, lastSync);
   if (key !== "photos") return rows;
 
   const out: any[] = [];
@@ -112,11 +101,7 @@ export async function syncNow(token: string): Promise<SyncResult> {
   for (const key of Object.keys(SYNC_TABLES)) {
     const rows = pulledData[key] || [];
     if (rows.length === 0) continue;
-    await applyServerRows(
-      LOCAL_TABLE[key],
-      rows,
-      key === "photos" ? photosTransform : undefined
-    );
+    await applyServerRows(key, rows, key === "photos" ? photosTransform : undefined);
     pulled += rows.length;
   }
 
