@@ -31,9 +31,9 @@ export const SYNC_TABLES: Record<string, string[]> = {
   photos: ["uuid", "tree_uuid", "uri", "caption", "created_at", "updated_at", "deleted_at"],
 };
 
-// Nome da tabela local para cada chave de sync (o servidor chama a tabela de
-// fotos de "photos"; localmente ela é "tree_photos").
-export const SYNC_LOCAL_TABLE: Record<string, string> = {
+// Nome da tabela local para cada chave de sincronização. As fotos ficam em
+// "tree_photos" no banco local (o servidor chama de "photos").
+export const LOCAL_TABLES: Record<string, string> = {
   projects: "projects",
   plots: "plots",
   trees: "trees",
@@ -547,37 +547,41 @@ export async function setSyncState(key: string, value: string): Promise<void> {
 
 // ── Sync: leitura de alterações locais e aplicação do servidor ──
 
-export async function listRowsForPush(tableKey: string, since: number): Promise<any[]> {
+// Lê as alterações locais de uma tabela (pela chave de sync) desde o último
+// envio. Retorna linhas prontas para o /sync/push.
+export async function listRowsForPush(syncKey: string, since: number): Promise<any[]> {
+  const local = LOCAL_TABLES[syncKey];
   return db.getAllAsync<any>(
-    `SELECT ${SYNC_TABLES[tableKey].join(", ")} FROM ${SYNC_LOCAL_TABLE[tableKey]} WHERE updated_at > ?`,
+    `SELECT ${SYNC_TABLES[syncKey].join(", ")} FROM ${local} WHERE updated_at > ?`,
     [since]
   );
 }
 
-export async function listAllRows(tableKey: string): Promise<any[]> {
+export async function listAllRows(syncKey: string): Promise<any[]> {
+  const local = LOCAL_TABLES[syncKey];
   return db.getAllAsync<any>(
-    `SELECT ${SYNC_TABLES[tableKey].join(", ")} FROM ${SYNC_LOCAL_TABLE[tableKey]}`
+    `SELECT ${SYNC_TABLES[syncKey].join(", ")} FROM ${local}`
   );
 }
 
 // Aplica linhas vindas do servidor com resolução last-writer-wins.
 export async function applyServerRows(
-  tableKey: string,
+  syncKey: string,
   rows: any[],
   transform?: (r: any) => any | Promise<any>
 ): Promise<void> {
   if (!rows || rows.length === 0) return;
-  const localTable = SYNC_LOCAL_TABLE[tableKey];
-  const cols = SYNC_TABLES[tableKey];
+  const local = LOCAL_TABLES[syncKey];
+  const cols = SYNC_TABLES[syncKey];
   const setCols = cols
     .filter((c) => c !== "uuid" && c !== "created_at")
     .map((c) => `${c} = excluded.${c}`)
     .join(", ");
   const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
-  const sql = `INSERT INTO ${localTable} (${cols.join(", ")})
+  const sql = `INSERT INTO ${local} (${cols.join(", ")})
     VALUES (${placeholders})
     ON CONFLICT (uuid) DO UPDATE SET ${setCols}
-    WHERE excluded.updated_at >= ${localTable}.updated_at`;
+    WHERE excluded.updated_at >= ${local}.updated_at`;
 
   await db.withTransactionAsync(async () => {
     for (const r of rows) {

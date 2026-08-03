@@ -101,7 +101,11 @@ export async function syncNow(token: string): Promise<SyncResult> {
   for (const key of Object.keys(SYNC_TABLES)) {
     const rows = pulledData[key] || [];
     if (rows.length === 0) continue;
-    await applyServerRows(key, rows, key === "photos" ? photosTransform : undefined);
+    await applyServerRows(
+      key,
+      rows,
+      key === "photos" ? photosTransform : undefined
+    );
     pulled += rows.length;
   }
 

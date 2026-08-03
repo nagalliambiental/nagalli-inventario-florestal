@@ -1,6 +1,5 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { randomUUID } from "node:crypto";
 import pool from "../db.js";
 import { signToken, requireAuth, requireAdmin } from "../auth.js";
@@ -9,7 +8,7 @@ const router = Router();
 
 // POST /auth/register
 // Cria uma conta. O PRIMEIRO usuario registrado vira administrador (bootstrap).
-// Depois disso, so administradores podem criar contas (token obrigatorio).
+// Depois disso, so administradores podem criar contas.
 router.post("/register", async (req, res) => {
   try {
     const { email, password, name, role } = req.body || {};
@@ -17,22 +16,15 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "email, password e name sao obrigatorios." });
     }
     const normalizedEmail = String(email).trim().toLowerCase();
-
-    // Autentica o solicitante (opcional: bootstrap nao precisa de token).
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-    let requester = null;
-    if (token) {
-      try {
-        requester = jwt.verify(token, process.env.JWT_SECRET);
-      } catch {}
-    }
+    const isAdmin = (req.user && req.user.role === "admin") || role === "admin";
 
     const { rows } = await pool.query("SELECT COUNT(*) AS n FROM users");
     const userCount = Number(rows[0].n);
 
-    if (userCount > 0 && (!requester || requester.role !== "admin")) {
-      return res.status(403).json({ error: "Somente o administrador pode criar contas." });
+    if (userCount > 0) {
+      if (!req.user || req.user.role !== "admin") {
+        return res.status(403).json({ error: "Somente o administrador pode criar contas." });
+      }
     }
 
     const existing = await pool.query("SELECT 1 FROM users WHERE email = $1", [normalizedEmail]);
@@ -40,7 +32,7 @@ router.post("/register", async (req, res) => {
       return res.status(409).json({ error: "Ja existe uma conta com este email." });
     }
 
-    const finalRole = userCount === 0 ? "admin" : requester?.role === "admin" ? (role === "worker" ? "worker" : "admin") : "worker";
+    const finalRole = userCount === 0 ? "admin" : isAdmin ? "admin" : "worker";
     const hash = await bcrypt.hash(String(password), 10);
     const uuid = randomUUID();
     await pool.query(
