@@ -8,6 +8,7 @@ services:
     runtime: node
     rootDir: server
     plan: free
+    autoDeploy: true
     buildCommand: npm ci || npm install
     startCommand: npm start
     healthCheckPath: /health
