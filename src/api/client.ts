@@ -1,7 +1,8 @@
-// Endereço da API (backend). Para desenvolvimento local, troque pelo IP da
-// sua máquina na mesma rede (ex.: http://192.168.0.10:3000). Para produção,
-// defina EXPO_PUBLIC_API_URL na hora do build (ex.: eas build).
-const DEFAULT_API_URL = "http://192.168.0.10:3000";
+// Endereço da API (backend).
+// Produção: https://nagalli-api.onrender.com
+// Para desenvolvimento local, troque pelo IP da sua máquina na mesma rede
+// (ex.: http://192.168.0.10:3000) ou defina EXPO_PUBLIC_API_URL no build.
+const DEFAULT_API_URL = "https://nagalli-api.onrender.com";
 
 export const API_URL =
   (process.env.EXPO_PUBLIC_API_URL as string) || DEFAULT_API_URL;
