@@ -174,6 +174,10 @@ export async function exportProjectBackup(projectId: string): Promise<boolean> {
     "Este arquivo pode ser importado em outro aparelho com o app:",
     "Tela inicial → Importar → Backup do projeto (.zip)",
     "",
+    "© Nagalli Ambiental Ltda. Direitos reservados. Proibida a cópia e/ou",
+    "distribuição total ou parcial deste acervo, por qualquer meio, inclusive",
+    "por ferramentas de Inteligência Artificial (Lei nº 9.610/98 e Lei nº 13.709/18).",
+    "",
   ];
   zip.file("LEIA-ME.txt", readme.join("\n"));
 

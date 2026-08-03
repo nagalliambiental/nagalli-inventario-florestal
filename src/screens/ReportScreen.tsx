@@ -124,6 +124,9 @@ export function ReportScreen({ route }: Props) {
         (s, i) =>
           `${i + 1}. ${s.speciesName}: IVI=${s.ivi.toFixed(2)} (Dens=${fmtPct(s.density)}, Dom=${fmtPct(s.dominance)}, Freq=${fmtPct(s.frequency)})`
       ),
+      "",
+      "© Nagalli Ambiental Ltda. Direitos reservados.",
+      "Proibida a cópia e/ou distribuição total ou parcial, por qualquer meio, inclusive por ferramentas de Inteligência Artificial (Lei nº 9.610/98 e Lei nº 13.709/18).",
     ];
     try {
       await Share.share({ message: lines.join("\n") });
