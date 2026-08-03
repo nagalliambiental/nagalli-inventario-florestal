@@ -492,9 +492,9 @@ export function ReportScreen({ route }: Props) {
         <View style={styles.volHeader}>
           <Text style={[styles.volColName, styles.volHeaderText]}>Espécie</Text>
           <Text style={[styles.volColNum, styles.volHeaderText]}>N</Text>
-          <Text style={[styles.volColNum, styles.volHeaderText]}>Tora</Text>
-          <Text style={[styles.volColNum, styles.volHeaderText]}>Total</Text>
-          <Text style={[styles.volColNum, styles.volHeaderText]}>Lenha</Text>
+          <Text style={[styles.volColNum, styles.volHeaderText]}>Tora (m³)</Text>
+          <Text style={[styles.volColNum, styles.volHeaderText]}>Total (m³)</Text>
+          <Text style={[styles.volColNum, styles.volHeaderText]}>Lenha (m³)</Text>
         </View>
         {speciesVolumes.map((s) => (
           <View key={s.speciesName} style={styles.volRow}>
@@ -502,9 +502,15 @@ export function ReportScreen({ route }: Props) {
               {s.speciesName}
             </Text>
             <Text style={styles.volColNum}>{s.n}</Text>
-            <Text style={styles.volColNum}>{fmtM3(s.volumeTora)}</Text>
-            <Text style={styles.volColNum}>{fmtM3(s.volumeTotal)}</Text>
-            <Text style={styles.volColNum}>{fmtM3(s.volumeLenha)}</Text>
+            <Text style={styles.volColNum} numberOfLines={1}>
+              {s.volumeTora.toFixed(2)}
+            </Text>
+            <Text style={styles.volColNum} numberOfLines={1}>
+              {s.volumeTotal.toFixed(2)}
+            </Text>
+            <Text style={styles.volColNum} numberOfLines={1}>
+              {s.volumeLenha.toFixed(2)}
+            </Text>
           </View>
         ))}
         <View style={styles.volTotalRow}>
@@ -513,13 +519,13 @@ export function ReportScreen({ route }: Props) {
             {treeTrees.length}
           </Text>
           <Text style={[styles.volColNum, styles.volTotalText]}>
-            {fmtM3(totalVolumes.volumeTora)}
+            {totalVolumes.volumeTora.toFixed(2)}
           </Text>
           <Text style={[styles.volColNum, styles.volTotalText]}>
-            {fmtM3(totalVolumes.volumeTotal)}
+            {totalVolumes.volumeTotal.toFixed(2)}
           </Text>
           <Text style={[styles.volColNum, styles.volTotalText]}>
-            {fmtM3(totalVolumes.volumeLenha)}
+            {totalVolumes.volumeLenha.toFixed(2)}
           </Text>
         </View>
       </Section>
@@ -739,6 +745,7 @@ function useStyles(colors: any) {
         samplingAlertText: { fontSize: 13, color: colors.warning, fontWeight: "600" },
         volHeader: {
           flexDirection: "row",
+          alignItems: "center",
           paddingVertical: 6,
           borderBottomWidth: 1,
           borderBottomColor: colors.border + "60",
@@ -758,9 +765,16 @@ function useStyles(colors: any) {
           borderTopWidth: 1,
           borderTopColor: colors.border,
         },
-        volColName: { flex: 1, fontSize: 13, color: colors.text, paddingRight: 6 },
+        volColName: {
+          flex: 1,
+          flexShrink: 1,
+          fontSize: 13,
+          color: colors.text,
+          paddingRight: 6,
+        },
         volColNum: {
-          width: 52,
+          width: 64,
+          flexShrink: 0,
           fontSize: 13,
           color: colors.text,
           textAlign: "right",
