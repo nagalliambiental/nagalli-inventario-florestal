@@ -6,11 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  type AlertButton,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
-import { listProjects, getProject } from "../db/database";
+import { listProjects, getProject, deleteProject } from "../db/database";
 import { colors } from "../constants/colors";
 import { fmtDate, methodLabel } from "../utils/formats";
 import { importProjectBackup, importExcelData } from "../utils/backup";
@@ -82,14 +83,15 @@ export function HomeScreen({ navigation }: Props) {
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
+      const createdBy = user?.name || "";
       let newId: string;
       if (kind === "backup") {
-        newId = await importProjectBackup(asset.uri);
+        newId = await importProjectBackup(asset.uri, createdBy);
       } else {
         const baseName = (asset.name || "planilha")
           .replace(/\.xlsx$/i, "")
           .replace(/\.xls$/i, "");
-        newId = await importExcelData(asset.uri, baseName);
+        newId = await importExcelData(asset.uri, baseName, createdBy);
       }
       const project = await getProject(newId);
       Alert.alert("Importação concluída", `Projeto "${project?.name}" criado com sucesso.`, [
@@ -101,20 +103,59 @@ export function HomeScreen({ navigation }: Props) {
     }
   };
 
+  const handleLongPress = (item: Project) => {
+    const actions: AlertButton[] = [
+      {
+        text: "Editar",
+        onPress: () => navigation.navigate("ProjectForm", { projectId: item.id }),
+      },
+    ];
+    if (isAdmin) {
+      actions.push({
+        text: "Excluir",
+        style: "destructive",
+        onPress: () => {
+          Alert.alert(
+            "Excluir projeto",
+            `Excluir "${item.name}"? Todos os dados (parcelas, árvores, fotos) serão removidos.`,
+            [
+              { text: "Cancelar", style: "cancel" },
+              {
+                text: "Excluir",
+                style: "destructive",
+                onPress: async () => {
+                  try {
+                    await deleteProject(item.id);
+                    listProjects().then(setProjects);
+                  } catch (e: any) {
+                    Alert.alert("Erro", e?.message || "Não foi possível excluir o projeto.");
+                  }
+                },
+              },
+            ]
+          );
+        },
+      });
+    }
+    actions.push({ text: "Cancelar", style: "cancel" });
+    Alert.alert(item.name, undefined, actions);
+  };
+
   const renderItem = ({ item }: { item: Project }) => (
     <TouchableOpacity
       style={styles.card}
       onPress={() => navigation.navigate("Project", { projectId: item.id })}
-      onLongPress={() =>
-        navigation.navigate("ProjectForm", { projectId: item.id })
-      }
+      onLongPress={() => handleLongPress(item)}
     >
       <Text style={styles.cardTitle}>{item.name}</Text>
       {item.client ? <Text style={styles.cardSub}>{item.client}</Text> : null}
       <Text style={styles.cardMeta}>
         {methodLabel(item.method)} • {item.areaHa} ha
       </Text>
-      <Text style={styles.cardDate}>{fmtDate(item.createdAt)}</Text>
+      <Text style={styles.cardDate}>
+        {fmtDate(item.createdAt)}
+        {item.createdBy ? ` • Criado por ${item.createdBy}` : ""}
+      </Text>
     </TouchableOpacity>
   );
 
@@ -134,22 +175,20 @@ export function HomeScreen({ navigation }: Props) {
           <Text style={styles.toolText}>🚪 Sair</Text>
         </TouchableOpacity>
       </View>
-      {isAdmin ? (
-        <View style={styles.toolbar}>
-          <TouchableOpacity style={styles.toolBtn} onPress={openImport}>
-            <Text style={styles.toolText}>📥 Importar</Text>
-          </TouchableOpacity>
+      <View style={styles.toolbar}>
+        <TouchableOpacity style={styles.toolBtn} onPress={openImport}>
+          <Text style={styles.toolText}>📥 Importar</Text>
+        </TouchableOpacity>
+        {isAdmin && (
           <TouchableOpacity
             style={styles.toolBtn}
             onPress={() => navigation.navigate("Users")}
           >
             <Text style={styles.toolText}>👥 Usuários</Text>
           </TouchableOpacity>
-        </View>
-      ) : null}
-      {user && !isAdmin && (
-        <Text style={styles.userName}>Olá, {user.name}</Text>
-      )}
+        )}
+      </View>
+      {user && <Text style={styles.userName}>Olá, {user.name}</Text>}
       <FlatList
         data={projects}
         keyExtractor={(i) => String(i.id)}

@@ -24,7 +24,7 @@ export function newId(): string {
 // ── Tabelas e colunas (para sync genérico) ──
 
 export const SYNC_TABLES: Record<string, string[]> = {
-  projects: ["uuid", "name", "client", "location", "method", "area_ha", "created_at", "updated_at", "deleted_at"],
+  projects: ["uuid", "name", "client", "location", "method", "area_ha", "created_by", "created_at", "updated_at", "deleted_at"],
   plots: ["uuid", "project_uuid", "code", "area_m2", "shape", "coordinates", "notes", "created_at", "updated_at", "deleted_at"],
   trees: ["uuid", "plot_uuid", "number", "species_id", "species_name", "is_tree", "cap_cm", "height_comercial_m", "height_total_m", "dbh_cm", "basal_area_m2", "stem_count", "phytosanitary", "photo_uri", "notes", "latitude", "longitude", "measured_at", "created_at", "updated_at", "deleted_at"],
   stems: ["uuid", "tree_uuid", "number", "cap_cm", "height_comercial_m", "height_total_m", "dbh_cm", "basal_area_m2", "created_at", "updated_at", "deleted_at"],
@@ -45,8 +45,19 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   db = await SQLite.openDatabaseAsync("nagalli_v2.db");
   await db.execAsync("PRAGMA foreign_keys = ON;");
   await db.execAsync(CREATE_TABLES);
+  await ensureProjectColumns();
   await migrateFromLegacy();
   return db;
+}
+
+// Migração de schema para bancos já existentes: garante a coluna created_by.
+async function ensureProjectColumns(): Promise<void> {
+  const cols = await db.getAllAsync<{ name: string }>("PRAGMA table_info(projects)");
+  if (!cols.some((c) => c.name === "created_by")) {
+    await db.execAsync(
+      "ALTER TABLE projects ADD COLUMN created_by TEXT NOT NULL DEFAULT ''"
+    );
+  }
 }
 
 // Migração única do banco antigo (ids inteiros) para o novo (uuids).
@@ -184,9 +195,9 @@ export async function createProject(
   const id = newId();
   const t = now();
   await db.runAsync(
-    `INSERT INTO projects (uuid, name, client, location, method, area_ha, created_at, updated_at, deleted_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-    [id, data.name, data.client || "", data.location || "", data.method, data.areaHa || 0, t, t]
+    `INSERT INTO projects (uuid, name, client, location, method, area_ha, created_by, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+    [id, data.name, data.client || "", data.location || "", data.method, data.areaHa || 0, data.createdBy || "", t, t]
   );
   return id;
 }
@@ -648,6 +659,7 @@ const mapper = {
     location: r.location,
     method: r.method,
     areaHa: r.area_ha,
+    createdBy: r.created_by || "",
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at || 0,

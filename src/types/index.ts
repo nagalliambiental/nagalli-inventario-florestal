@@ -5,6 +5,7 @@ export interface Project {
   location: string;
   method: SurveyMethod;
   areaHa: number;
+  createdBy: string;
   createdAt: number;
   updatedAt: number;
   deletedAt?: number;

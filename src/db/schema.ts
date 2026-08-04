@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS projects (
   location TEXT NOT NULL DEFAULT '',
   method TEXT NOT NULL DEFAULT 'censo',
   area_ha REAL NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL DEFAULT 0,
   deleted_at INTEGER NOT NULL DEFAULT 0

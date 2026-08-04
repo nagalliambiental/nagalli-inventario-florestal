@@ -64,9 +64,14 @@ export function ProjectScreen({ route, navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.projectName} numberOfLines={1}>
-          {project.name}
-        </Text>
+        <View style={{ flex: 1, marginRight: 12 }}>
+          <Text style={styles.projectName} numberOfLines={1}>
+            {project.name}
+          </Text>
+          {project.createdBy ? (
+            <Text style={styles.createdBy}>Criado por {project.createdBy}</Text>
+          ) : null}
+        </View>
         <TouchableOpacity
           onPress={() => navigation.navigate("ProjectForm", { projectId })}
           style={styles.editBtn}
@@ -146,7 +151,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
   },
-  projectName: { fontSize: 19, fontWeight: "700", color: colors.text, flex: 1, marginRight: 12 },
+  projectName: { fontSize: 19, fontWeight: "700", color: colors.text },
+  createdBy: { fontSize: 12, color: colors.textLight, marginTop: 2 },
   editBtn: {
     backgroundColor: colors.surface,
     borderWidth: 1,

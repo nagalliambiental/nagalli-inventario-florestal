@@ -44,7 +44,7 @@ async function upsert(syncKey, cols, records) {
 
 const TABLES = {
   projects: [
-    "uuid", "name", "client", "location", "method", "area_ha",
+    "uuid", "name", "client", "location", "method", "area_ha", "created_by",
     "created_at", "updated_at", "deleted_at",
   ],
   plots: [

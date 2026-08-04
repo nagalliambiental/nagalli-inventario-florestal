@@ -208,7 +208,7 @@ export async function exportProjectBackup(projectId: string): Promise<boolean> {
 
 // Restaura um projeto inteiro (dados + fotos) a partir de um .zip de backup.
 // Retorna o id do novo projeto criado no aparelho de destino.
-export async function importProjectBackup(uri: string): Promise<string> {
+export async function importProjectBackup(uri: string, createdBy = ""): Promise<string> {
   const JSZip = (await import("jszip")).default;
   const b64 = await FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
@@ -247,6 +247,7 @@ export async function importProjectBackup(uri: string): Promise<string> {
     location: manifest.project.location,
     method: (manifest.project.method as any) || "censo",
     areaHa: manifest.project.areaHa || 0,
+    createdBy,
   });
 
   for (const bp of manifest.plots || []) {
@@ -392,7 +393,7 @@ function resolveSpecies(
 
 // Importa os dados da planilha de campo (modelo "Árvores" do app) criando um
 // novo projeto com parcelas e árvores. Retorna o id do projeto criado.
-export async function importExcelData(uri: string, baseName: string): Promise<string> {
+export async function importExcelData(uri: string, baseName: string, createdBy = ""): Promise<string> {
   const XLSX = await import("xlsx");
   const b64 = await FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
@@ -439,6 +440,7 @@ export async function importExcelData(uri: string, baseName: string): Promise<st
     location: "",
     method: "censo",
     areaHa: 0,
+    createdBy,
   });
 
   const plotsByCode = new Map<string, string>();

@@ -18,10 +18,14 @@ CREATE TABLE IF NOT EXISTS projects (
   location TEXT NOT NULL DEFAULT '',
   method TEXT NOT NULL DEFAULT 'censo',
   area_ha REAL NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ
 );
+
+-- Migração para tabelas já existentes (adiciona created_by sem apagar dados).
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS plots (
   uuid TEXT PRIMARY KEY,

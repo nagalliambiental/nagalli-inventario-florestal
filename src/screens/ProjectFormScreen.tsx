@@ -12,12 +12,14 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { getProject, createProject, updateProject } from "../db/database";
 import { colors } from "../constants/colors";
 import { methodOptions } from "../utils/formats";
+import { useUser } from "../contexts/UserContext";
 import type { RootStackParamList } from "../types/navigation";
 import type { SurveyMethod } from "../types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ProjectForm">;
 
 export function ProjectFormScreen({ route, navigation }: Props) {
+  const { user } = useUser();
   const projectId = route.params?.projectId;
   const isEdit = !!projectId;
 
@@ -52,6 +54,7 @@ export function ProjectFormScreen({ route, navigation }: Props) {
       location: location.trim(),
       method,
       areaHa: parseFloat((areaHa || "").replace(",", ".")) || 0,
+      createdBy: user?.name || "",
     };
     if (isEdit) {
       await updateProject(projectId!, data);
