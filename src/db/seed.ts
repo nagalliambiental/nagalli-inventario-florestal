@@ -12,7 +12,7 @@ export async function seedSpecies(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.withTransactionAsync(async () => {
     for (const s of defaultSpecies) {
       await db.runAsync(
-        `INSERT INTO species (uuid, popular_name, scientific_name, family, phytophysiognomy, wood_density, created_at, updated_at, deleted_at)
+        `INSERT OR IGNORE INTO species (uuid, popular_name, scientific_name, family, phytophysiognomy, wood_density, created_at, updated_at, deleted_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
         [speciesUuid(s.scientificName, s.popularName), s.popularName, s.scientificName, s.family, s.phytophysiognomy, s.woodDensity, t, t]
       );

@@ -95,10 +95,24 @@ async function ensureSpeciesColumns(): Promise<void> {
   const semUuid = await db.getAllAsync<{ id: number; scientific_name: string; popular_name: string }>(
     "SELECT id, scientific_name, popular_name FROM species WHERE uuid IS NULL OR uuid = ''"
   );
+  // Uuids já em uso (inclusive os de registros com deleted_at) para não colidir
+  // no índice único quando existirem nomes de espécie duplicados no banco antigo.
+  const usados = new Set<string>();
+  const jaTem = await db.getAllAsync<{ uuid: string }>(
+    "SELECT uuid FROM species WHERE uuid IS NOT NULL AND uuid != ''"
+  );
+  for (const r of jaTem) usados.add(r.uuid);
   const t = now();
   for (const s of semUuid) {
+    let uuid = speciesUuid(s.scientific_name, s.popular_name);
+    let suffix = 2;
+    while (usados.has(uuid)) {
+      uuid = `${speciesUuid(s.scientific_name, s.popular_name)}-${suffix}`;
+      suffix++;
+    }
+    usados.add(uuid);
     await db.runAsync("UPDATE species SET uuid = ?, updated_at = ? WHERE id = ?", [
-      speciesUuid(s.scientific_name, s.popular_name),
+      uuid,
       t,
       s.id,
     ]);
@@ -545,6 +559,14 @@ export async function insertSpecies(
   data: Omit<Species, "id">
 ): Promise<number> {
   const t = now();
+  const uuid = speciesUuid(data.scientificName, data.popularName);
+  // Se o uuid já existe (mesmo nome de espécie), reutiliza o registro existente
+  // em vez de quebrar o índice único — o uuid é determinístico por nome.
+  const existente = await db.getFirstAsync<{ id: number }>(
+    "SELECT id FROM species WHERE uuid = ?",
+    [uuid]
+  );
+  if (existente) return existente.id;
   const result = await db.runAsync(
     `INSERT INTO species (uuid, popular_name, scientific_name, family, phytophysiognomy, wood_density,
       habito, distribuicao, endemismo, status_conservacao,
@@ -553,7 +575,7 @@ export async function insertSpecies(
       created_at, updated_at, deleted_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
     [
-      speciesUuid(data.scientificName, data.popularName),
+      uuid,
       data.popularName, data.scientificName, data.family, data.phytophysiognomy, data.woodDensity,
       data.habit, data.distribution, data.endemism, data.conservationStatus,
       data.growth, data.lifeSpan, data.dbhAmplitude, data.heightAmplitude,
