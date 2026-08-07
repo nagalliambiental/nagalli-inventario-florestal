@@ -18,15 +18,18 @@ import { TreeFormScreen } from "./src/screens/TreeFormScreen";
 import { ReportScreen } from "./src/screens/ReportScreen";
 import { PinScreen } from "./src/screens/PinScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { useAutoSync } from "./src/utils/useAutoSync";
 import type { RootStackParamList } from "./src/types/navigation";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function AppContent() {
   const { colors } = useTheme();
-  const { locked, ready: authReady } = useUser();
+  const { locked, ready: authReady, token } = useUser();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useAutoSync(token, !locked && authReady && ready);
 
   useEffect(() => {
     let cancelled = false;

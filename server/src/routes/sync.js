@@ -65,6 +65,12 @@ const TABLES = {
     "uuid", "tree_uuid", "uri", "caption", "data",
     "created_at", "updated_at", "deleted_at",
   ],
+  species: [
+    "uuid", "popular_name", "scientific_name", "family", "phytophysiognomy", "wood_density",
+    "habito", "distribuicao", "endemismo", "status_conservacao", "crescimento", "vida_media",
+    "amplitude_diametrica", "amplitude_altura", "epifitas", "lianas_herbaceas", "lianas_lenhosas",
+    "gramineas", "regeneracao_dossel", "created_at", "updated_at", "deleted_at",
+  ],
 };
 
 // Nome real da tabela no banco. As fotos ficam em "tree_photos" (a chave de
@@ -75,6 +81,7 @@ const TABLE_NAMES = {
   trees: "trees",
   stems: "stems",
   photos: "tree_photos",
+  species: "species",
 };
 
 // POST /sync/push

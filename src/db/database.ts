@@ -21,6 +21,14 @@ export function newId(): string {
   return Crypto.randomUUID();
 }
 
+// Identificador estável do catálogo de espécies: derivado do nome científico
+// (ou popular quando não houver), para que o mesmo nome se una entre aparelhos.
+export function speciesUuid(scientificName: string, popularName: string): string {
+  const name = (scientificName || popularName || "").trim().toLowerCase();
+  const slug = name.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug ? `sp-${slug}` : newId();
+}
+
 // ── Tabelas e colunas (para sync genérico) ──
 
 export const SYNC_TABLES: Record<string, string[]> = {
@@ -29,6 +37,7 @@ export const SYNC_TABLES: Record<string, string[]> = {
   trees: ["uuid", "plot_uuid", "number", "species_id", "species_name", "is_tree", "cap_cm", "height_comercial_m", "height_total_m", "dbh_cm", "basal_area_m2", "stem_count", "phytosanitary", "photo_uri", "notes", "latitude", "longitude", "measured_at", "created_at", "updated_at", "deleted_at"],
   stems: ["uuid", "tree_uuid", "number", "cap_cm", "height_comercial_m", "height_total_m", "dbh_cm", "basal_area_m2", "created_at", "updated_at", "deleted_at"],
   photos: ["uuid", "tree_uuid", "uri", "caption", "created_at", "updated_at", "deleted_at"],
+  species: ["uuid", "popular_name", "scientific_name", "family", "phytophysiognomy", "wood_density", "habito", "distribuicao", "endemismo", "status_conservacao", "crescimento", "vida_media", "amplitude_diametrica", "amplitude_altura", "epifitas", "lianas_herbaceas", "lianas_lenhosas", "gramineas", "regeneracao_dossel", "created_at", "updated_at", "deleted_at"],
 };
 
 // Nome da tabela local para cada chave de sincronização. As fotos ficam em
@@ -39,6 +48,7 @@ export const LOCAL_TABLES: Record<string, string> = {
   trees: "trees",
   stems: "stems",
   photos: "tree_photos",
+  species: "species",
 };
 
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -46,6 +56,7 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   await db.execAsync("PRAGMA foreign_keys = ON;");
   await db.execAsync(CREATE_TABLES);
   await ensureProjectColumns();
+  await ensureSpeciesColumns();
   await migrateFromLegacy();
   return db;
 }
@@ -57,6 +68,40 @@ async function ensureProjectColumns(): Promise<void> {
     await db.execAsync(
       "ALTER TABLE projects ADD COLUMN created_by TEXT NOT NULL DEFAULT ''"
     );
+  }
+}
+
+// Migração do catálogo de espécies para suportar sincronização na nuvem:
+// adiciona uuid, timestamps e tombstone, e gera uuid para as espécies antigas.
+async function ensureSpeciesColumns(): Promise<void> {
+  const cols = await db.getAllAsync<{ name: string }>("PRAGMA table_info(species)");
+  const missing = (name: string) => !cols.some((c) => c.name === name);
+  if (missing("uuid")) {
+    await db.execAsync("ALTER TABLE species ADD COLUMN uuid TEXT");
+  }
+  if (missing("created_at")) {
+    await db.execAsync("ALTER TABLE species ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0");
+  }
+  if (missing("updated_at")) {
+    await db.execAsync("ALTER TABLE species ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0");
+  }
+  if (missing("deleted_at")) {
+    await db.execAsync("ALTER TABLE species ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0");
+  }
+  await db.execAsync(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_species_uuid ON species(uuid)"
+  );
+
+  const semUuid = await db.getAllAsync<{ id: number; scientific_name: string; popular_name: string }>(
+    "SELECT id, scientific_name, popular_name FROM species WHERE uuid IS NULL OR uuid = ''"
+  );
+  const t = now();
+  for (const s of semUuid) {
+    await db.runAsync("UPDATE species SET uuid = ?, updated_at = ? WHERE id = ?", [
+      speciesUuid(s.scientific_name, s.popular_name),
+      t,
+      s.id,
+    ]);
   }
 }
 
@@ -85,16 +130,19 @@ async function migrateFromLegacy(): Promise<void> {
 
     // Espécies (mesmas ids inteiras)
     const species = await legacy.getAllAsync<any>("SELECT * FROM species");
+    const spTime = now();
     for (const s of species) {
       await db.runAsync(
-        `INSERT OR IGNORE INTO species (id, popular_name, scientific_name, family, phytophysiognomy, wood_density,
+        `INSERT OR IGNORE INTO species (id, uuid, popular_name, scientific_name, family, phytophysiognomy, wood_density,
           habito, distribuicao, endemismo, status_conservacao, crescimento, vida_media,
-          amplitude_diametrica, amplitude_altura, epifitas, lianas_herbaceas, lianas_lenhosas, gramineas, regeneracao_dossel)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [s.id, s.popular_name, s.scientific_name, s.family, s.phytophysiognomy, s.wood_density,
+          amplitude_diametrica, amplitude_altura, epifitas, lianas_herbaceas, lianas_lenhosas, gramineas, regeneracao_dossel,
+          created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        [s.id, speciesUuid(s.scientific_name, s.popular_name), s.popular_name, s.scientific_name, s.family, s.phytophysiognomy, s.wood_density,
           s.habito || "", s.distribuicao || "", s.endemismo || "", s.status_conservacao || "",
           s.crescimento || "", s.vida_media || "", s.amplitude_diametrica || "", s.amplitude_altura || "",
-          s.epifitas || "", s.lianas_herbaceas || "", s.lianas_lenhosas || "", s.gramineas || "", s.regeneracao_dossel || ""]
+          s.epifitas || "", s.lianas_herbaceas || "", s.lianas_lenhosas || "", s.gramineas || "", s.regeneracao_dossel || "",
+          spTime, spTime]
       );
     }
 
@@ -464,11 +512,11 @@ export async function deleteTreePhoto(id: string): Promise<void> {
   }
 }
 
-// ── Species (catálogo local, não sincronizado) ──
+// ── Species (catálogo local, sincronizado pela nuvem) ──
 
 export async function listSpecies(): Promise<Species[]> {
   const rows = await db.getAllAsync<any>(
-    "SELECT * FROM species ORDER BY scientific_name"
+    "SELECT * FROM species WHERE deleted_at = 0 ORDER BY scientific_name"
   );
   return rows.map(mapper.species);
 }
@@ -478,8 +526,8 @@ export async function listSpeciesByPhyto(
 ): Promise<Species[]> {
   const rows = await db.getAllAsync<any>(
     phytophysiognomy
-      ? "SELECT * FROM species WHERE phytophysiognomy = ? ORDER BY popular_name"
-      : "SELECT * FROM species ORDER BY popular_name",
+      ? "SELECT * FROM species WHERE phytophysiognomy = ? AND deleted_at = 0 ORDER BY popular_name"
+      : "SELECT * FROM species WHERE deleted_at = 0 ORDER BY popular_name",
     phytophysiognomy ? [phytophysiognomy] : []
   );
   return rows.map(mapper.species);
@@ -487,7 +535,7 @@ export async function listSpeciesByPhyto(
 
 export async function getSpecies(id: number): Promise<Species | null> {
   const row = await db.getFirstAsync<any>(
-    "SELECT * FROM species WHERE id = ?",
+    "SELECT * FROM species WHERE id = ? AND deleted_at = 0",
     [id]
   );
   return row ? mapper.species(row) : null;
@@ -496,24 +544,32 @@ export async function getSpecies(id: number): Promise<Species | null> {
 export async function insertSpecies(
   data: Omit<Species, "id">
 ): Promise<number> {
+  const t = now();
   const result = await db.runAsync(
-    `INSERT INTO species (popular_name, scientific_name, family, phytophysiognomy, wood_density,
+    `INSERT INTO species (uuid, popular_name, scientific_name, family, phytophysiognomy, wood_density,
       habito, distribuicao, endemismo, status_conservacao,
       crescimento, vida_media, amplitude_diametrica, amplitude_altura,
-      epifitas, lianas_herbaceas, lianas_lenhosas, gramineas, regeneracao_dossel)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      epifitas, lianas_herbaceas, lianas_lenhosas, gramineas, regeneracao_dossel,
+      created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
     [
+      speciesUuid(data.scientificName, data.popularName),
       data.popularName, data.scientificName, data.family, data.phytophysiognomy, data.woodDensity,
       data.habit, data.distribution, data.endemism, data.conservationStatus,
       data.growth, data.lifeSpan, data.dbhAmplitude, data.heightAmplitude,
       data.epiphytes, data.herbaceousLianas, data.woodyLianas, data.grasses, data.canopyRegeneration,
+      t, t,
     ]
   );
   return result.lastInsertRowId;
 }
 
 export async function deleteSpecies(id: number): Promise<void> {
-  await db.runAsync("DELETE FROM species WHERE id = ?", [id]);
+  const t = now();
+  await db.runAsync(
+    "UPDATE species SET deleted_at = ?, updated_at = ? WHERE id = ?",
+    [t, t, id]
+  );
 }
 
 // ── Configurações do app ──
@@ -539,6 +595,45 @@ export async function deleteConfig(key: string): Promise<void> {
 }
 
 // ── Estado da sincronização ──
+
+export const LAST_SYNC_KEY = "last_sync_at";
+
+export async function getLastSyncMs(): Promise<number> {
+  const raw = await getSyncState(LAST_SYNC_KEY);
+  return raw ? parseInt(raw, 10) : 0;
+}
+
+// Verifica se um projeto (ou um de seus itens) tem alterações locais ainda
+// não enviadas à nuvem.
+export async function isProjectPending(projectId: string): Promise<boolean> {
+  const lastSync = await getLastSyncMs();
+  const row = await db.getFirstAsync<{ c: number }>(
+    `SELECT (
+       EXISTS(SELECT 1 FROM projects WHERE uuid = ? AND updated_at > ?)
+       OR EXISTS(SELECT 1 FROM plots WHERE project_uuid = ? AND updated_at > ?)
+       OR EXISTS(SELECT 1 FROM trees t JOIN plots p ON t.plot_uuid = p.uuid WHERE p.project_uuid = ? AND t.updated_at > ?)
+       OR EXISTS(SELECT 1 FROM stems s JOIN trees t ON s.tree_uuid = t.uuid JOIN plots p ON t.plot_uuid = p.uuid WHERE p.project_uuid = ? AND s.updated_at > ?)
+       OR EXISTS(SELECT 1 FROM tree_photos ph JOIN trees t ON ph.tree_uuid = t.uuid JOIN plots p ON t.plot_uuid = p.uuid WHERE p.project_uuid = ? AND ph.updated_at > ?)
+     ) as c`,
+    [projectId, lastSync, projectId, lastSync, projectId, lastSync, projectId, lastSync, projectId, lastSync]
+  );
+  return !!row?.c;
+}
+
+// Verifica se uma árvore (ou seus fustes/fotos) tem alterações locais não
+// enviadas à nuvem.
+export async function isTreePending(treeId: string): Promise<boolean> {
+  const lastSync = await getLastSyncMs();
+  const row = await db.getFirstAsync<{ c: number }>(
+    `SELECT (
+       EXISTS(SELECT 1 FROM trees WHERE uuid = ? AND updated_at > ?)
+       OR EXISTS(SELECT 1 FROM stems WHERE tree_uuid = ? AND updated_at > ?)
+       OR EXISTS(SELECT 1 FROM tree_photos WHERE tree_uuid = ? AND updated_at > ?)
+     ) as c`,
+    [treeId, lastSync, treeId, lastSync, treeId, lastSync]
+  );
+  return !!row?.c;
+}
 
 export async function getSyncState(key: string): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>(

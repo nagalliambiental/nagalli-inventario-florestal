@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS tree_photos (
 );
 CREATE TABLE IF NOT EXISTS species (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uuid TEXT,
   popular_name TEXT NOT NULL,
   scientific_name TEXT NOT NULL,
   family TEXT,
@@ -92,7 +93,10 @@ CREATE TABLE IF NOT EXISTS species (
   lianas_herbaceas TEXT DEFAULT '',
   lianas_lenhosas TEXT DEFAULT '',
   gramineas TEXT DEFAULT '',
-  regeneracao_dossel TEXT DEFAULT ''
+  regeneracao_dossel TEXT DEFAULT '',
+  created_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  deleted_at INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS app_config (
   key TEXT PRIMARY KEY,
@@ -107,4 +111,5 @@ CREATE INDEX IF NOT EXISTS idx_trees_plot ON trees(plot_uuid);
 CREATE INDEX IF NOT EXISTS idx_trees_species ON trees(species_id);
 CREATE INDEX IF NOT EXISTS idx_stems_tree ON stems(tree_uuid);
 CREATE INDEX IF NOT EXISTS idx_tree_photos_tree ON tree_photos(tree_uuid);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_species_uuid ON species(uuid);
 `;

@@ -48,6 +48,8 @@ const emptyStem = (): StemInput => ({ capCm: "", heightComercialM: "", heightTot
 const HABIT_OPTIONS = ["A - Arbórea", "Ar - Arbustiva", "Li - Liana", "Ep - Epífita", "Pt - Pteridófita", "B - Bambu"];
 const ARBOREA_HABIT = "A - Arbórea";
 const habitIsTree = (habit?: string) => !habit || habit === ARBOREA_HABIT;
+const speciesDisplayName = (s: Species) =>
+  s.scientificName?.trim() || s.popularName?.trim() || "Não identificada";
 const DISTRIBUTION_OPTIONS = ["Comum", "Frequente", "Rara"];
 const ENDEMISM_OPTIONS = ["Não", "Mata Atlântica", "Brasil"];
 const CONSERVATION_OPTIONS = ["EN (IAT, 1995)", "EN (MMA, 2022)", "VU (MMA, 2022)", "CR (MMA, 2022)", "NT (MMA, 2022)", "LC (MMA, 2022)"];
@@ -221,7 +223,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
   );
 
   const handleSelectSpecies = (s: Species) => {
-    setSpeciesName(s.scientificName);
+    setSpeciesName(speciesDisplayName(s));
     setSpeciesId(s.id);
     setIsTree(habitIsTree(s.habit));
     setShowSpeciesModal(false);
@@ -229,10 +231,6 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
   const handleAddSpecies = async () => {
     const scientificName = newSpecies.scientificName.trim();
-    if (!scientificName) {
-      Alert.alert("Nome científico obrigatório");
-      return;
-    }
     const woodDensity = parseFloat(newSpecies.woodDensity.replace(",", "."));
     const created: Species = {
       id: 0,
@@ -258,10 +256,10 @@ export function TreeFormScreen({ route, navigation }: Props) {
     created.id = await insertSpecies(created);
     setSpeciesList((prev) =>
       [...prev, created].sort((a, b) =>
-        a.scientificName.localeCompare(b.scientificName)
+        speciesDisplayName(a).localeCompare(speciesDisplayName(b))
       )
     );
-    setSpeciesName(scientificName);
+    setSpeciesName(speciesDisplayName(created));
     setSpeciesId(created.id);
     setIsTree(habitIsTree(created.habit));
     setNewSpecies({
@@ -277,7 +275,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
   const handleDeleteSpecies = (s: Species) => {
     Alert.alert(
       "Excluir espécie",
-      `Excluir "${s.scientificName}"? As árvores já cadastradas mantêm o nome digitado.`,
+      `Excluir "${speciesDisplayName(s)}"? As árvores já cadastradas mantêm o nome digitado.`,
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -323,15 +321,15 @@ export function TreeFormScreen({ route, navigation }: Props) {
     if (!isNaN(n) && n > 0) setStemCount(String(n));
   };
 
-  const findOrCreateSpecies = async (scientificName: string) => {
-    const norm = scientificName.trim().toLowerCase();
+  const findOrCreateSpecies = async (name: string) => {
+    const norm = name.trim().toLowerCase();
     const found =
-      [...speciesList].find((s) => s.scientificName.toLowerCase() === norm) ||
-      (await listSpecies()).find((s) => s.scientificName.toLowerCase() === norm);
+      [...speciesList].find((s) => speciesDisplayName(s).toLowerCase() === norm) ||
+      (await listSpecies()).find((s) => speciesDisplayName(s).toLowerCase() === norm);
     if (found) return found.id;
     return insertSpecies({
       popularName: newSpecies.popularName.trim(),
-      scientificName: scientificName.trim(),
+      scientificName: name.trim(),
       family: "",
       phytophysiognomy: phytoFilter,
       woodDensity: 0,
@@ -365,9 +363,6 @@ export function TreeFormScreen({ route, navigation }: Props) {
           return;
         }
       }
-    } else if (!newSpecies.scientificName.trim()) {
-      Alert.alert("Nome científico obrigatório", "Informe a espécie do indivíduo não-árvore.");
-      return;
     }
 
     const syncPhotos = async (treeIdStr: string) => {
@@ -387,12 +382,17 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
     if (!isTree) {
       const scientificName = newSpecies.scientificName.trim();
-      const spId = await findOrCreateSpecies(scientificName);
+      const fallbackName = scientificName || newSpecies.popularName.trim();
+      if (!fallbackName) {
+        Alert.alert("Espécie obrigatória", "Informe o nome científico ou o nome popular do indivíduo não-árvore.");
+        return;
+      }
+      const spId = await findOrCreateSpecies(fallbackName);
       const data = {
         plotId,
         number: parseInt(number) || 1,
         speciesId: spId,
-        speciesName: scientificName,
+        speciesName: fallbackName,
         isTree: false,
         capCm: 0,
         heightComercialM: 0,
@@ -641,7 +641,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
             no levantamento florístico.
           </Text>
 
-          <Text style={styles.label}>Nome científico *</Text>
+          <Text style={styles.label}>Nome científico</Text>
           <TextInput
             style={styles.input}
             value={newSpecies.scientificName}
@@ -786,7 +786,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
                 onLongPress={() => handleDeleteSpecies(item)}
                 delayLongPress={400}
               >
-                <Text style={styles.speciesItemName}>{item.scientificName}</Text>
+                <Text style={styles.speciesItemName}>{speciesDisplayName(item)}</Text>
                 <Text style={styles.speciesItemPop}>
                   {item.popularName} • {item.family}
                 </Text>
@@ -809,7 +809,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.newSpeciesForm} keyboardShouldPersistTaps="handled">
-            <Text style={styles.label}>Nome científico *</Text>
+            <Text style={styles.label}>Nome científico</Text>
             <TextInput
               style={styles.input}
               value={newSpecies.scientificName}

@@ -27,6 +27,7 @@ import { exportXlsx, exportKml, exportProjectImages } from "../utils/export";
 import { exportProjectBackup } from "../utils/backup";
 import { useTheme } from "../contexts/ThemeContext";
 import { calcDiameterDistribution } from "../utils/diametric";
+import { HBarChart, VBarChart } from "../components/Charts";
 import {
   calcHorizontalStructure,
   calcVerticalStructure,
@@ -130,6 +131,13 @@ export function ReportScreen({ route }: Props) {
 
       {/* IVI */}
       <Section styles={styles} title="IVI — Índice de Valor de Importância">
+        {ivi.length > 0 && (
+          <HBarChart
+            data={ivi.slice(0, 12).map((s) => ({ label: s.speciesName, value: s.ivi }))}
+            formatValue={(v) => v.toFixed(1)}
+            colors={colors}
+          />
+        )}
         {ivi.map((s, i) => (
           <View key={s.speciesName} style={styles.iviRow}>
             <Text style={styles.iviPos}>{i + 1}.</Text>
@@ -279,6 +287,14 @@ export function ReportScreen({ route }: Props) {
               Classes fixas de 5 cm (5–10, 10–15, 15–20, ...) • área amostrada ={" "}
               {diametric.areaHa.toFixed(3)} ha
             </Text>
+            <VBarChart
+              data={diametric.classes.map((c) => ({
+                label: `${c.lower.toFixed(0)}-${c.upper.toFixed(0)}`,
+                value: c.count,
+              }))}
+              formatLabel={(l) => l}
+              colors={colors}
+            />
             <View style={styles.volHeader}>
               <Text style={[styles.volColName, styles.volHeaderText]}>Classe DAP</Text>
               <Text style={[styles.volColNum, styles.volHeaderText]}>N</Text>

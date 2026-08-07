@@ -4,12 +4,13 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   Alert,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { listTrees, deleteTree, listStems } from "../db/database";
+import { listTrees, deleteTree, listStems, isTreePending } from "../db/database";
 import { colors } from "../constants/colors";
 import { fmtCm, fmtM, fmtM2, fmtM3, fmtDate } from "../utils/formats";
 import { calcPlotResults, calcShannon, calcPielou, sumTreeVolumes, treeDbhCm } from "../utils/calculations";
@@ -21,6 +22,8 @@ type Props = NativeStackScreenProps<RootStackParamList, "Plot">;
 export function PlotScreen({ route, navigation }: Props) {
   const { plotId } = route.params;
   const [trees, setTrees] = useState<Tree[]>([]);
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
 
   useFocusEffect(
     useCallback(() => {
@@ -31,7 +34,18 @@ export function PlotScreen({ route, navigation }: Props) {
   const loadTrees = async () => {
     const t = await listTrees(plotId);
     setTrees(t);
+    const flags = await Promise.all(t.map((tr) => isTreePending(tr.id)));
+    setPendingIds(new Set(t.filter((_, i) => flags[i]).map((tr) => tr.id)));
   };
+
+  const q = query.trim().toLowerCase();
+  const visibleTrees = q
+    ? trees.filter((t) => {
+        const num = String(t.number);
+        const species = (t.speciesName || "").toLowerCase();
+        return num.includes(q) || species.includes(q);
+      })
+    : trees;
 
   const treeTrees = trees.filter((t) => t.isTree);
   const results = calcPlotResults(treeTrees);
@@ -68,11 +82,31 @@ export function PlotScreen({ route, navigation }: Props) {
         </View>
       </View>
 
+      <View style={styles.searchWrap}>
+        <TextInput
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Buscar por número ou espécie..."
+          placeholderTextColor={colors.textLight}
+          clearButtonMode="while-editing"
+        />
+        {q ? (
+          <TouchableOpacity onPress={() => setQuery("")}>
+            <Text style={styles.searchClear}>✕</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
       <FlatList
-        data={trees}
+        data={visibleTrees}
         keyExtractor={(i) => String(i.id)}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={<Text style={styles.empty}>Nenhuma árvore cadastrada</Text>}
+        ListEmptyComponent={
+          <Text style={styles.empty}>
+            {q ? "Nenhuma árvore encontrada" : "Nenhuma árvore cadastrada"}
+          </Text>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
@@ -85,6 +119,9 @@ export function PlotScreen({ route, navigation }: Props) {
                 <Text style={styles.nonTreeTag}>não-árvore</Text>
               )}
               <Text style={styles.species}>{item.speciesName || "—"}</Text>
+              {pendingIds.has(item.id) && (
+                <Text style={styles.pendingTag}>⚠️</Text>
+              )}
             </View>
             <View style={styles.cardRow}>
               <Text style={styles.meta}>CAP: {fmtCm(item.capCm)}</Text>
@@ -128,6 +165,19 @@ const styles = StyleSheet.create({
   },
   miniValue: { fontSize: 15, fontWeight: "700", color: colors.primary },
   miniLabel: { fontSize: 9, color: colors.textSecondary, marginTop: 1 },
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 10,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+  },
+  searchInput: { flex: 1, paddingVertical: 10, fontSize: 15, color: colors.text },
+  searchClear: { fontSize: 16, color: colors.textLight, padding: 4 },
   list: { padding: 16, paddingBottom: 80 },
   empty: { textAlign: "center", color: colors.textLight, marginTop: 40, fontSize: 15 },
   card: {
@@ -152,6 +202,7 @@ const styles = StyleSheet.create({
   },
   treeNum: { fontSize: 16, fontWeight: "700", color: colors.text },
   species: { fontSize: 15, color: colors.textSecondary, fontStyle: "italic" },
+  pendingTag: { fontSize: 14, marginLeft: "auto" },
   cardRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 6 },
   meta: { fontSize: 13, color: colors.textLight },
   fab: {

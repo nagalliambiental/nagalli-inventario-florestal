@@ -11,6 +11,9 @@ import { colors } from "../constants/colors";
 import { phytoOptions } from "../utils/formats";
 import type { Species } from "../types";
 
+const speciesDisplayName = (s: Species) =>
+  s.scientificName?.trim() || s.popularName?.trim() || "Não identificada";
+
 interface Props {
   speciesList: Species[];
   phytoFilter: string;
@@ -63,7 +66,7 @@ export function SpeciesPicker({
               style={styles.item}
               onPress={() => onSelect(item)}
             >
-              <Text style={styles.sciName}>{item.scientificName}</Text>
+              <Text style={styles.sciName}>{speciesDisplayName(item)}</Text>
               <Text style={styles.popName}>
                 {item.popularName} • {item.family}
               </Text>

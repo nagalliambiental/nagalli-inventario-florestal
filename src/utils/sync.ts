@@ -8,9 +8,8 @@ import {
   setSyncState,
   getTreePhoto,
 } from "../db/database";
+import { LAST_SYNC_KEY } from "../db/database";
 import { PHOTOS_DIR, deletePhotoFile } from "./photos";
-
-const LAST_SYNC_KEY = "last_sync_at";
 
 export interface SyncResult {
   pushed: number;

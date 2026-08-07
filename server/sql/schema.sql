@@ -88,6 +88,32 @@ CREATE TABLE IF NOT EXISTS tree_photos (
   deleted_at TIMESTAMPTZ
 );
 
+-- Catálogo de espécies compartilhado entre aparelhos (sincronizado).
+CREATE TABLE IF NOT EXISTS species (
+  uuid TEXT PRIMARY KEY,
+  popular_name TEXT NOT NULL DEFAULT '',
+  scientific_name TEXT NOT NULL DEFAULT '',
+  family TEXT NOT NULL DEFAULT '',
+  phytophysiognomy TEXT NOT NULL DEFAULT '',
+  wood_density REAL NOT NULL DEFAULT 0,
+  habito TEXT NOT NULL DEFAULT '',
+  distribuicao TEXT NOT NULL DEFAULT '',
+  endemismo TEXT NOT NULL DEFAULT '',
+  status_conservacao TEXT NOT NULL DEFAULT '',
+  crescimento TEXT NOT NULL DEFAULT '',
+  vida_media TEXT NOT NULL DEFAULT '',
+  amplitude_diametrica TEXT NOT NULL DEFAULT '',
+  amplitude_altura TEXT NOT NULL DEFAULT '',
+  epifitas TEXT NOT NULL DEFAULT '',
+  lianas_herbaceas TEXT NOT NULL DEFAULT '',
+  lianas_lenhosas TEXT NOT NULL DEFAULT '',
+  gramineas TEXT NOT NULL DEFAULT '',
+  regeneracao_dossel TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
+);
+
 CREATE INDEX IF NOT EXISTS idx_plots_project ON plots(project_uuid);
 CREATE INDEX IF NOT EXISTS idx_trees_plot ON trees(plot_uuid);
 CREATE INDEX IF NOT EXISTS idx_stems_tree ON stems(tree_uuid);
@@ -97,3 +123,4 @@ CREATE INDEX IF NOT EXISTS idx_sync_plots ON plots(updated_at);
 CREATE INDEX IF NOT EXISTS idx_sync_trees ON trees(updated_at);
 CREATE INDEX IF NOT EXISTS idx_sync_stems ON stems(updated_at);
 CREATE INDEX IF NOT EXISTS idx_sync_photos ON tree_photos(updated_at);
+CREATE INDEX IF NOT EXISTS idx_sync_species ON species(updated_at);

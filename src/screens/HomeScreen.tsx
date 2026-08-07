@@ -11,7 +11,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
-import { listProjects, getProject, deleteProject } from "../db/database";
+import { listProjects, getProject, deleteProject, isProjectPending } from "../db/database";
 import { colors } from "../constants/colors";
 import { fmtDate, methodLabel } from "../utils/formats";
 import { importProjectBackup, importExcelData } from "../utils/backup";
@@ -22,9 +22,13 @@ import type { RootStackParamList } from "../types/navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home">;
 
+type StatusFilter = "todos" | "pendentes" | "sincronizados";
+
 export function HomeScreen({ navigation }: Props) {
   const { user, isAdmin, logout, token } = useUser();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [syncing, setSyncing] = useState(false);
 
   useFocusEffect(
@@ -33,12 +37,33 @@ export function HomeScreen({ navigation }: Props) {
     }, [])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        const ps = await listProjects();
+        if (cancelled) return;
+        const flags = await Promise.all(ps.map((p) => isProjectPending(p.id)));
+        if (cancelled) return;
+        setPendingIds(new Set(ps.filter((_, i) => flags[i]).map((p) => p.id)));
+      })();
+      return () => { cancelled = true; };
+    }, [])
+  );
+
+  const visibleProjects =
+    statusFilter === "todos"
+      ? projects
+      : projects.filter((p) =>
+          statusFilter === "pendentes" ? pendingIds.has(p.id) : !pendingIds.has(p.id)
+        );
+
   const handleSync = async () => {
     if (!token || syncing) return;
     setSyncing(true);
     try {
       const r = await syncNow(token);
-      listProjects().then(setProjects);
+      await refreshProjects();
       Alert.alert(
         "Sincronizado",
         r.pushed === 0 && r.pulled === 0
@@ -53,6 +78,13 @@ export function HomeScreen({ navigation }: Props) {
     } finally {
       setSyncing(false);
     }
+  };
+
+  const refreshProjects = async () => {
+    const ps = await listProjects();
+    setProjects(ps);
+    const flags = await Promise.all(ps.map((p) => isProjectPending(p.id)));
+    setPendingIds(new Set(ps.filter((_, i) => flags[i]).map((p) => p.id)));
   };
 
   const openImport = () => {
@@ -147,7 +179,12 @@ export function HomeScreen({ navigation }: Props) {
       onPress={() => navigation.navigate("Project", { projectId: item.id })}
       onLongPress={() => handleLongPress(item)}
     >
-      <Text style={styles.cardTitle}>{item.name}</Text>
+      <View style={styles.cardTitleRow}>
+        <Text style={styles.cardTitle}>{item.name}</Text>
+        {pendingIds.has(item.id) && (
+          <Text style={styles.pendingTag}>⚠️ não enviado</Text>
+        )}
+      </View>
       {item.client ? <Text style={styles.cardSub}>{item.client}</Text> : null}
       <Text style={styles.cardMeta}>
         {methodLabel(item.method)} • {item.areaHa} ha
@@ -189,8 +226,27 @@ export function HomeScreen({ navigation }: Props) {
         )}
       </View>
       {user && <Text style={styles.userName}>Olá, {user.name}</Text>}
+      <View style={styles.filterRow}>
+        {(
+          [
+            { key: "todos", label: "Todos" },
+            { key: "pendentes", label: "⚠️ Não enviados" },
+            { key: "sincronizados", label: "✅ Sincronizados" },
+          ] as { key: StatusFilter; label: string }[]
+        ).map((f) => (
+          <TouchableOpacity
+            key={f.key}
+            style={[styles.filterBtn, statusFilter === f.key && styles.filterActive]}
+            onPress={() => setStatusFilter(f.key)}
+          >
+            <Text style={[styles.filterText, statusFilter === f.key && styles.filterTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
       <FlatList
-        data={projects}
+        data={visibleProjects}
         keyExtractor={(i) => String(i.id)}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
@@ -221,6 +277,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     paddingHorizontal: 16,
     paddingTop: 10,
+  },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  filterBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filterText: { fontSize: 12, color: colors.textSecondary },
+  filterTextActive: { color: colors.white, fontWeight: "600" },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  pendingTag: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#fff",
+    backgroundColor: colors.warning,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    overflow: "hidden",
   },
   toolBtn: {
     flex: 1,
