@@ -111,5 +111,4 @@ CREATE INDEX IF NOT EXISTS idx_trees_plot ON trees(plot_uuid);
 CREATE INDEX IF NOT EXISTS idx_trees_species ON trees(species_id);
 CREATE INDEX IF NOT EXISTS idx_stems_tree ON stems(tree_uuid);
 CREATE INDEX IF NOT EXISTS idx_tree_photos_tree ON tree_photos(tree_uuid);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_species_uuid ON species(uuid);
 `;
