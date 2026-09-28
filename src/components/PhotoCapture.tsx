@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -20,9 +20,11 @@ interface Pending {
   width: number;
   height: number;
   caption?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
-const MAX_DIM = 1200;
+const MAX_DIM = 1600;
 
 export function PhotoCapture({
   onPhoto,
@@ -72,6 +74,13 @@ export function PhotoCapture({
     saveToGallery(uri);
   };
 
+  const useOriginal = async () => {
+    if (!pending) return;
+    const snapshot = pending;
+    setPending(null);
+    await finalize(null, snapshot);
+  };
+
   const takePhoto = async () => {
     if (!cameraRef.current) return;
     const result = await cameraRef.current.takePictureAsync({ base64: false });
@@ -105,6 +114,8 @@ export function PhotoCapture({
         width: processed.width,
         height: processed.height,
         caption,
+        latitude,
+        longitude,
       });
     } catch {
       onPhoto(result.uri);
@@ -139,7 +150,7 @@ export function PhotoCapture({
         </View>
       )}
 
-      {!showCamera && (
+      {!showCamera && !pending && (
         <TouchableOpacity style={styles.btn} onPress={() => setShowCamera(true)}>
           <Text style={styles.btnText}>📸 {buttonLabel || "Fotografar"}</Text>
         </TouchableOpacity>
@@ -151,13 +162,14 @@ export function PhotoCapture({
           width={pending.width}
           height={pending.height}
           caption={pending.caption}
-          latitude={latitude}
-          longitude={longitude}
+          latitude={pending.latitude}
+          longitude={pending.longitude}
           onDone={async (watermarked) => {
             const snapshot = pending;
             setPending(null);
             await finalize(watermarked, snapshot);
           }}
+          onCancel={useOriginal}
         />
       )}
     </View>

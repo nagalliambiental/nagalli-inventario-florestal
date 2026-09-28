@@ -18,7 +18,6 @@ import {
   getTree,
   listTrees,
   updateTree,
-  listSpeciesByPhyto,
   listSpecies,
   getSpecies,
   insertSpecies,
@@ -29,7 +28,7 @@ import {
 } from "../db/database";
 import { colors } from "../constants/colors";
 import { capToDbh, dbhToBasalArea, processTree } from "../utils/calculations";
-import { phytosanitaryOptions, phytoOptions } from "../utils/formats";
+import { phytosanitaryOptions } from "../utils/formats";
 import { PhotoCapture } from "../components/PhotoCapture";
 import { requestLocationPermission, getCurrentCoords } from "../utils/location";
 import type { Species, Stem } from "../types";
@@ -50,6 +49,8 @@ const ARBOREA_HABIT = "A - Arbórea";
 const habitIsTree = (habit?: string) => !habit || habit === ARBOREA_HABIT;
 const speciesDisplayName = (s: Species) =>
   s.scientificName?.trim() || s.popularName?.trim() || "Não identificada";
+const normStr = (s?: string) =>
+  (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const DISTRIBUTION_OPTIONS = ["Comum", "Frequente", "Rara"];
 const ENDEMISM_OPTIONS = ["Não", "Mata Atlântica", "Brasil"];
 const CONSERVATION_OPTIONS = ["EN (IAT, 1995)", "EN (MMA, 2022)", "VU (MMA, 2022)", "CR (MMA, 2022)", "NT (MMA, 2022)", "LC (MMA, 2022)"];
@@ -91,7 +92,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
   // Species picker
   const [showSpeciesModal, setShowSpeciesModal] = useState(false);
-  const [phytoFilter, setPhytoFilter] = useState("Mata Atlântica");
+  const [speciesQuery, setSpeciesQuery] = useState("");
   const [speciesList, setSpeciesList] = useState<Species[]>([]);
 
   // Nova espécie manual
@@ -142,13 +143,21 @@ export function TreeFormScreen({ route, navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       loadSpecies();
-    }, [phytoFilter])
+    }, [])
   );
 
   const loadSpecies = async () => {
-    const list = await listSpeciesByPhyto(phytoFilter);
+    const list = await listSpecies();
     setSpeciesList(list);
   };
+
+  const displaySpecies = speciesList.filter((s) => {
+    const q = normStr(speciesQuery);
+    if (!q) return true;
+    return [s.scientificName, s.popularName, s.family].some((f) =>
+      normStr(f).includes(q)
+    );
+  });
 
   useEffect(() => {
     if (treeId) {
@@ -237,7 +246,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
       popularName: newSpecies.popularName.trim(),
       scientificName,
       family: newSpecies.family.trim(),
-      phytophysiognomy: phytoFilter,
+      phytophysiognomy: "",
       woodDensity: isNaN(woodDensity) ? 0 : woodDensity,
       habit: newSpecies.habit,
       distribution: newSpecies.distribution,
@@ -331,7 +340,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
       popularName: newSpecies.popularName.trim(),
       scientificName: name.trim(),
       family: "",
-      phytophysiognomy: phytoFilter,
+      phytophysiognomy: "",
       woodDensity: 0,
       habit: newSpecies.habit,
       distribution: newSpecies.distribution,
@@ -765,19 +774,18 @@ export function TreeFormScreen({ route, navigation }: Props) {
               </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.phytoFilterRow}>
-            {phytoOptions.map((p) => (
-              <TouchableOpacity
-                key={p}
-                style={[styles.filterBtn, phytoFilter === p && styles.filterBtnActive]}
-                onPress={() => setPhytoFilter(p)}
-              >
-                <Text style={[styles.filterText, phytoFilter === p && styles.filterTextActive]}>{p}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <TextInput
+            style={[styles.input, styles.searchInput]}
+            value={speciesQuery}
+            onChangeText={setSpeciesQuery}
+            placeholder="Buscar por nome científico, popular ou família..."
+            placeholderTextColor={colors.textLight}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
           <FlatList
-            data={speciesList}
+            data={displaySpecies}
             keyExtractor={(i) => String(i.id)}
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -927,10 +935,6 @@ export function TreeFormScreen({ route, navigation }: Props) {
               onChange={(v) => setNewSpecies((s) => ({ ...s, canopyRegeneration: v }))}
             />
 
-            <Text style={styles.phytoHint}>
-              A espécie será salva na fitofisionomia selecionada: {phytoFilter}
-            </Text>
-
             <TouchableOpacity style={styles.saveBtn} onPress={handleAddSpecies}>
               <Text style={styles.saveText}>Salvar espécie</Text>
             </TouchableOpacity>
@@ -1077,6 +1081,7 @@ const styles = StyleSheet.create({
   filterBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   filterText: { fontSize: 12, color: colors.textSecondary },
   filterTextActive: { color: colors.white, fontWeight: "600" },
+  searchInput: { marginHorizontal: 16, marginTop: 12, marginBottom: 8 },
   speciesItem: {
     padding: 14,
     borderBottomWidth: 1,

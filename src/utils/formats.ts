@@ -18,11 +18,34 @@ export function fmtPct(value: number): string {
   return `${value.toFixed(2)}%`;
 }
 
+// America/São_Paulo = UTC-3 fixo (Brasil sem horário de verão desde 2019).
+// O deslocamento é aplicado ao epoch e os getters UTC renderizam a hora local
+// de São Paulo independentemente do fuso horário do aparelho.
+// (UTC-3 ⇒ deslocamento negativo em relação à UTC.)
+const SP_OFFSET_MS = -(3 * 60 * 60 * 1000);
+
+function spDate(d: Date): Date {
+  return new Date(d.getTime() + SP_OFFSET_MS);
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
 export function fmtDate(dateStr: string | number): string {
   if (dateStr === null || dateStr === undefined || dateStr === "") return "";
   const d = typeof dateStr === "number" ? new Date(dateStr) : new Date(dateStr);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("pt-BR");
+  const s = spDate(d);
+  return `${pad(s.getUTCDate())}/${pad(s.getUTCMonth() + 1)}/${s.getUTCFullYear()}`;
+}
+
+export function fmtDateTime(dateStr: string | number): string {
+  if (dateStr === null || dateStr === undefined || dateStr === "") return "";
+  const d = typeof dateStr === "number" ? new Date(dateStr) : new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const s = spDate(d);
+  return `${fmtDate(d.getTime())} ${pad(s.getUTCHours())}:${pad(s.getUTCMinutes())}:${pad(s.getUTCSeconds())}`;
 }
 
 export function methodLabel(method: string): string {
