@@ -36,7 +36,9 @@ jobs:
 
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease --console=plain
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --console=plain
 
       - uses: actions/upload-artifact@v5
         with:
