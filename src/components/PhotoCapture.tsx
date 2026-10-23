@@ -1,7 +1,6 @@
 import React, { useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as ImageManipulator from "expo-image-manipulator";
 import * as MediaLibrary from "expo-media-library";
 import { colors } from "../constants/colors";
 import { PhotoWatermark } from "./PhotoWatermark";
@@ -23,8 +22,6 @@ interface Pending {
   latitude?: number;
   longitude?: number;
 }
-
-const MAX_DIM = 1600;
 
 export function PhotoCapture({
   onPhoto,
@@ -56,12 +53,7 @@ export function PhotoCapture({
     if (watermarked) {
       try {
         // PNG do view-shot → JPEG compactado e persistente
-        const jpeg = await ImageManipulator.manipulateAsync(
-          watermarked,
-          [],
-          { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
-        );
-        uri = await persistPhoto(jpeg.uri);
+        uri = await persistPhoto(watermarked);
       } catch {
         uri = await persistPhoto(watermarked);
       }
@@ -83,44 +75,21 @@ export function PhotoCapture({
 
   const takePhoto = async () => {
     if (!cameraRef.current) return;
-    const result = await cameraRef.current.takePictureAsync({ base64: false });
+    const result = await cameraRef.current.takePictureAsync({
+      base64: false,
+      quality: 1,
+    });
     if (!result?.uri) return;
     setShowCamera(false);
 
-    try {
-      let processed = await ImageManipulator.manipulateAsync(
-        result.uri,
-        [],
-        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
-      );
-      const maxDim = Math.max(processed.width, processed.height);
-      if (maxDim > MAX_DIM) {
-        const s = MAX_DIM / maxDim;
-        processed = await ImageManipulator.manipulateAsync(
-          processed.uri,
-          [
-            {
-              resize: {
-                width: Math.round(processed.width * s),
-                height: Math.round(processed.height * s),
-              },
-            },
-          ],
-          { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
-        );
-      }
-      setPending({
-        uri: processed.uri,
-        width: processed.width,
-        height: processed.height,
-        caption,
-        latitude,
-        longitude,
-      });
-    } catch {
-      onPhoto(result.uri);
-      saveToGallery(result.uri);
-    }
+    setPending({
+      uri: result.uri,
+      width: result.width,
+      height: result.height,
+      caption,
+      latitude,
+      longitude,
+    });
   };
 
   if (!permission) return null;

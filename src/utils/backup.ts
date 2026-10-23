@@ -11,7 +11,13 @@ import {
   createTree,
   addTreePhoto,
 } from "../db/database";
-import { buildKmlString, buildXlsxBase64, listProjectImageFiles } from "./export";
+import {
+  buildKmlString,
+  buildXlsxBase64,
+  listProjectImages,
+  addProjectImagesToZip,
+  writeZipToFile,
+} from "./export";
 import { PHOTOS_DIR } from "./photos";
 
 const FORMAT = "nagalli-project-backup";
@@ -104,24 +110,23 @@ export async function exportProjectBackup(projectId: string): Promise<boolean> {
   };
 
   // Fotos com nomes legíveis (PROJETO_PARCELA_NUMEROARVORE) dentro de IMAGENS/.
-  const imageFiles = await listProjectImageFiles(project, plots, allTrees);
-  const imagesByTree = new Map<string, typeof imageFiles>();
-  for (const f of imageFiles) {
+  // São lidas/recomprimidas uma de cada vez para não estourar a memória.
+  const images = listProjectImages(project, plots, allTrees);
+  const imagesByTree = new Map<string, typeof images>();
+  for (const f of images) {
     const arr = imagesByTree.get(f.treeUuid) || [];
     arr.push(f);
     imagesByTree.set(f.treeUuid, arr);
   }
-  for (const f of imageFiles) {
-    zip.file(`IMAGENS/${f.name}`, f.base64, { base64: true });
-  }
+  const addedImages = await addProjectImagesToZip(zip, images, "IMAGENS/");
 
   for (const plot of plots) {
     const trees = allTrees.filter((t) => t.plotId === plot.id);
     const backupTrees: BackupTree[] = [];
     for (const t of trees) {
-      const photoRefs: BackupTreePhoto[] = (imagesByTree.get(t.id) || []).map(
-        (f) => ({ ref: `IMAGENS/${f.name}`, caption: f.caption })
-      );
+      const photoRefs: BackupTreePhoto[] = (imagesByTree.get(t.id) || [])
+        .filter((f) => addedImages.has(f.name))
+        .map((f) => ({ ref: `IMAGENS/${f.name}`, caption: f.caption }));
 
       backupTrees.push({
         number: t.number,
@@ -175,7 +180,7 @@ export async function exportProjectBackup(projectId: string): Promise<boolean> {
     `Exportado em: ${manifest.exportedAt}`,
     `Parcelas: ${manifest.plots.length}`,
     `Árvores: ${allTrees.length}`,
-    `Imagens: ${imageFiles.length}`,
+    `Imagens: ${addedImages.size}`,
     "",
     "Conteúdo deste arquivo:",
     "  - manifest.json ....... dados para reimportação no app",
@@ -193,15 +198,9 @@ export async function exportProjectBackup(projectId: string): Promise<boolean> {
   ];
   zip.file("LEIA-ME.txt", readme.join("\n"));
 
-  const b64 = await zip.generateAsync({
-    type: "base64",
-    compression: "STORE",
-  });
   const uri =
     FileSystem.documentDirectory + `BACKUP_${sanitizeFileName(project.name)}.zip`;
-  await FileSystem.writeAsStringAsync(uri, b64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  await writeZipToFile(zip, uri);
   await Sharing.shareAsync(uri, { mimeType: "application/zip" });
   return true;
 }

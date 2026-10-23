@@ -1,5 +1,5 @@
 import * as FileSystem from "expo-file-system";
-import { apiFetch } from "../api/client";
+import { apiFetch, ApiError } from "../api/client";
 import {
   SYNC_TABLES,
   listRowsForPush,
@@ -8,7 +8,7 @@ import {
   setSyncState,
   getTreePhoto,
 } from "../db/database";
-import { LAST_SYNC_KEY } from "../db/database";
+import { LAST_SYNC_KEY, LAST_PULL_KEY } from "../db/database";
 import { PHOTOS_DIR, deletePhotoFile } from "./photos";
 
 export interface SyncResult {
@@ -40,19 +40,20 @@ async function writePhotoData(uuid: string, data: string): Promise<string> {
 
 // Fotos: envia também o conteúdo (base64) para que fiquem disponíveis nos
 // outros aparelhos (o uri local é só um caminho de arquivo neste celular).
-async function rowsForPush(key: string, lastSync: number): Promise<any[]> {
-  const rows = await listRowsForPush(key, lastSync);
-  if (key !== "photos") return rows;
-
+// Lê uma foto por vez para não montar um corpo gigante de uma só vez.
+async function photoRowsWithData(rows: any[]): Promise<any[]> {
   const out: any[] = [];
   for (const r of rows) {
     const { data: _data, ...rest } = r;
     let data = "";
     if (rest.uri) {
       try {
-        data = await FileSystem.readAsStringAsync(rest.uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+        const info = await FileSystem.getInfoAsync(rest.uri);
+        if (info.exists) {
+          data = await FileSystem.readAsStringAsync(rest.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        }
       } catch {}
     }
     out.push({ ...rest, data });
@@ -62,57 +63,128 @@ async function rowsForPush(key: string, lastSync: number): Promise<any[]> {
 
 // Transforma as fotos vindas do servidor: grava o arquivo localmente e
 // preserva/limpa o uri de acordo (caminho de arquivo local é específico do aparelho).
-async function photosTransform(r: any): Promise<any> {
-  const existing = await getTreePhoto(r.uuid);
-  if (r.deleted_at > 0) {
-    if (existing?.uri) await deletePhotoFile(existing.uri);
-    return { ...r, uri: "", deleted_at: r.deleted_at ?? 0 };
-  }
-  if (r.data) {
-    const uri = await writePhotoData(r.uuid, r.data);
-    return { ...r, uri, deleted_at: r.deleted_at ?? 0 };
-  }
-  return { ...r, uri: existing?.uri || r.uri || "", deleted_at: r.deleted_at ?? 0 };
+function makePhotosTransform(token: string) {
+  return async (r: any): Promise<any> => {
+    const existing = await getTreePhoto(r.uuid);
+    if (r.deleted_at > 0) {
+      if (existing?.uri) await deletePhotoFile(existing.uri);
+      return { ...r, data: "", uri: "", deleted_at: r.deleted_at ?? 0 };
+    }
+
+    let existingUri = "";
+    if (existing?.uri) {
+      try {
+        const info = await FileSystem.getInfoAsync(existing.uri);
+        if (info.exists) existingUri = existing.uri;
+      } catch {}
+    }
+
+    let data = existingUri ? "" : r.data || "";
+    if (!data && !existingUri) {
+      // O servidor novo não envia o conteúdo no pull (economiza memória);
+      // baixa apenas a foto que ainda não existe neste aparelho.
+      try {
+        const resp = await apiFetch(`/sync/photo/${r.uuid}`, { token });
+        data = resp?.data || "";
+      } catch {}
+    }
+
+    if (data) {
+      const uri = await writePhotoData(r.uuid, data);
+      return { ...r, data: "", uri, deleted_at: r.deleted_at ?? 0 };
+    }
+    return { ...r, data: "", uri: existingUri, deleted_at: r.deleted_at ?? 0 };
+  };
 }
 
 // Sincroniza este aparelho com a nuvem: envia as alterações locais e baixa as
 // alterações dos outros aparelhos. Requer conexão com a internet.
 export async function syncNow(token: string): Promise<SyncResult> {
-  const lastSyncRaw = await getSyncState(LAST_SYNC_KEY);
-  const lastSync = lastSyncRaw ? parseInt(lastSyncRaw, 10) : 0;
-  const first = lastSync === 0;
+  // Duas marcas independentes:
+  //  - LAST_SYNC_KEY: o que já foi ENVIADO (push)
+  //  - LAST_PULL_KEY: o que já foi BAIXADO (pull)
+  // Antes eram a mesma, então um download que falhava deixava o projeto local
+  // aparecendo como "não enviado" para sempre, mesmo já estando no servidor.
+  const lastPushRaw = await getSyncState(LAST_SYNC_KEY);
+  const lastPush = lastPushRaw ? parseInt(lastPushRaw, 10) : 0;
+  const lastPullRaw = await getSyncState(LAST_PULL_KEY);
+  const lastPull = lastPullRaw ? parseInt(lastPullRaw, 10) : 0;
+  const first = lastPull === 0;
 
-  // 1) Push: alterações locais desde o último sync.
-  const body: any = {};
+  // Reenvia uma janela de 24h para absorver diferença de relógio entre o
+  // aparelho e o servidor. O upsert no servidor é idempotente.
+  const pushSince = Math.max(0, lastPush - 24 * 60 * 60 * 1000);
+  // Capturada ANTES do envio: registro criado durante o push volta a ser
+  // enviado na próxima rodada.
+  const pushStartedAt = Date.now();
+
+  // 1) Push das tabelas comuns: projeto, parcelas, árvores, fustes, espécies.
   let pushed = 0;
-  for (const key of Object.keys(SYNC_TABLES)) {
-    const rows = await rowsForPush(key, lastSync);
-    body[key] = rows;
-    pushed += rows.length;
+  try {
+    for (const key of Object.keys(SYNC_TABLES)) {
+      if (key === "photos") continue;
+      const rows = await listRowsForPush(key, pushSince);
+      if (rows.length === 0) continue;
+      await apiFetch("/sync/push", { method: "POST", body: { [key]: rows }, token });
+      pushed += rows.length;
+    }
+  } catch (e: any) {
+    throw new ApiError(`Falha ao enviar dados: ${e?.message || e}`, e?.status ?? 0);
   }
-  await apiFetch("/sync/push", { method: "POST", body, token });
 
-  // 2) Pull: alterações remotas desde o último sync (snapshot completo se nunca sincronizou).
-  const since = first ? "" : `?since=${new Date(lastSync).toISOString()}`;
-  const pulledData = await apiFetch(`/sync/pull${since}`, { token });
+  // O projeto e suas parcelas/árvores JÁ estão no servidor. Registra aqui,
+  // antes das fotos: um falha no upload de imagem não pode deixar o projeto
+  // preso em "não enviado" (a janela de 24h reenvia as fotos na próxima rodada).
+  await setSyncState(LAST_SYNC_KEY, String(Math.max(pushStartedAt, lastPush)));
 
+  // 2) Push das fotos, em lotes pequenos para não montar um JSON gigante.
+  try {
+    const photoRows = await listRowsForPush("photos", pushSince);
+    const PHOTO_BATCH = 6;
+    for (let i = 0; i < photoRows.length; i += PHOTO_BATCH) {
+      const batch = await photoRowsWithData(photoRows.slice(i, i + PHOTO_BATCH));
+      await apiFetch("/sync/push", {
+        method: "POST",
+        body: { photos: batch },
+        token,
+        timeoutMs: 120000,
+      });
+      pushed += batch.length;
+    }
+  } catch (e: any) {
+    throw new ApiError(`Falha ao enviar fotos: ${e?.message || e}`, e?.status ?? 0);
+  }
+
+  // 3) Pull: alterações remotas (snapshot completo se nunca baixou).
+  // meta=1 evita baixar o conteúdo das fotos de uma vez; cada foto é buscada
+  // sob demanda em /sync/photo/:uuid (servidor antigo ignora e devolve tudo).
   let pulled = 0;
-  for (const key of Object.keys(SYNC_TABLES)) {
-    const rows = pulledData[key] || [];
-    if (rows.length === 0) continue;
-    await applyServerRows(
-      key,
-      rows,
-      key === "photos" ? photosTransform : undefined
-    );
-    pulled += rows.length;
-  }
+  try {
+    const since = first ? "" : `?since=${new Date(lastPull).toISOString()}`;
+    const metaParam = `${since ? "&" : "?"}meta=1`;
+    const pulledData = await apiFetch(`/sync/pull${since}${metaParam}`, {
+      token,
+      timeoutMs: 180000,
+    });
 
-  // 3) Marca o momento do sync. Usa o relógio do servidor com uma margem de
-  // segurança para não perder alterações locais em caso de diferença de relógio.
-  const serverNow = typeof pulledData.now === "number" ? pulledData.now : Date.now();
-  const nextLastSync = Math.max(serverNow - 5 * 60 * 1000, lastSync);
-  await setSyncState(LAST_SYNC_KEY, String(nextLastSync));
+    for (const key of Object.keys(SYNC_TABLES)) {
+      const rows = pulledData[key] || [];
+      if (rows.length === 0) continue;
+      const skipped = await applyServerRows(
+        key,
+        rows,
+        key === "photos" ? makePhotosTransform(token) : undefined
+      );
+      pulled += rows.length - skipped;
+    }
+
+    // Margem de 5min no relógio do servidor para não perder alterações.
+    const serverNow = typeof pulledData.now === "number" ? pulledData.now : Date.now();
+    const nextPull = Math.max(serverNow - 5 * 60 * 1000, lastPull);
+    await setSyncState(LAST_PULL_KEY, String(nextPull));
+  } catch (e: any) {
+    throw new ApiError(`Falha ao baixar dados: ${e?.message || e}`, e?.status ?? 0);
+  }
 
   return { pushed, pulled, first };
 }

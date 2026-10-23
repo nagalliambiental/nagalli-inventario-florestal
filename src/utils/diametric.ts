@@ -26,7 +26,7 @@ export interface DiametricResult {
 }
 
 export function calcDiameterDistribution(
-  trees: Tree[],
+  trees: Array<Pick<Tree, "dbhCm" | "basalAreaM2" | "capCm">>,
   areaHa = 1
 ): DiametricResult | null {
   // treeDbhCm já retorna o Deq da árvore: para multifuste, √(Σ dap² dos fustes);

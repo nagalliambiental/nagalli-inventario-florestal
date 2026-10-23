@@ -586,6 +586,37 @@ export async function insertSpecies(
   return result.lastInsertRowId;
 }
 
+export async function updateSpecies(
+  id: number,
+  data: Partial<Omit<Species, "id">>
+): Promise<void> {
+  const fields: string[] = [];
+  const values: any[] = [];
+  if (data.popularName !== undefined) { fields.push("popular_name = ?"); values.push(data.popularName); }
+  if (data.scientificName !== undefined) { fields.push("scientific_name = ?"); values.push(data.scientificName); }
+  if (data.family !== undefined) { fields.push("family = ?"); values.push(data.family); }
+  if (data.phytophysiognomy !== undefined) { fields.push("phytophysiognomy = ?"); values.push(data.phytophysiognomy); }
+  if (data.woodDensity !== undefined) { fields.push("wood_density = ?"); values.push(data.woodDensity); }
+  if (data.habit !== undefined) { fields.push("habito = ?"); values.push(data.habit); }
+  if (data.distribution !== undefined) { fields.push("distribuicao = ?"); values.push(data.distribution); }
+  if (data.endemism !== undefined) { fields.push("endemismo = ?"); values.push(data.endemism); }
+  if (data.conservationStatus !== undefined) { fields.push("status_conservacao = ?"); values.push(data.conservationStatus); }
+  if (data.growth !== undefined) { fields.push("crescimento = ?"); values.push(data.growth); }
+  if (data.lifeSpan !== undefined) { fields.push("vida_media = ?"); values.push(data.lifeSpan); }
+  if (data.dbhAmplitude !== undefined) { fields.push("amplitude_diametrica = ?"); values.push(data.dbhAmplitude); }
+  if (data.heightAmplitude !== undefined) { fields.push("amplitude_altura = ?"); values.push(data.heightAmplitude); }
+  if (data.epiphytes !== undefined) { fields.push("epifitas = ?"); values.push(data.epiphytes); }
+  if (data.herbaceousLianas !== undefined) { fields.push("lianas_herbaceas = ?"); values.push(data.herbaceousLianas); }
+  if (data.woodyLianas !== undefined) { fields.push("lianas_lenhosas = ?"); values.push(data.woodyLianas); }
+  if (data.grasses !== undefined) { fields.push("gramineas = ?"); values.push(data.grasses); }
+  if (data.canopyRegeneration !== undefined) { fields.push("regeneracao_dossel = ?"); values.push(data.canopyRegeneration); }
+  if (fields.length === 0) return;
+  fields.push("updated_at = ?");
+  values.push(now());
+  values.push(id);
+  await db.runAsync(`UPDATE species SET ${fields.join(", ")} WHERE id = ?`, values);
+}
+
 export async function deleteSpecies(id: number): Promise<void> {
   const t = now();
   await db.runAsync(
@@ -619,6 +650,9 @@ export async function deleteConfig(key: string): Promise<void> {
 // ── Estado da sincronização ──
 
 export const LAST_SYNC_KEY = "last_sync_at";
+// Marca do PULL, separada do push. Assim um download que falha não impede que
+// os dados já enviados fiquem registrados como sincronizados.
+export const LAST_PULL_KEY = "last_pull_at";
 
 export async function getLastSyncMs(): Promise<number> {
   const raw = await getSyncState(LAST_SYNC_KEY);
@@ -697,8 +731,9 @@ export async function applyServerRows(
   syncKey: string,
   rows: any[],
   transform?: (r: any) => any | Promise<any>
-): Promise<void> {
-  if (!rows || rows.length === 0) return;
+): Promise<number> {
+  if (!rows || rows.length === 0) return 0;
+  let skipped = 0;
   const local = LOCAL_TABLES[syncKey];
   const cols = SYNC_TABLES[syncKey];
   const setCols = cols
@@ -711,17 +746,30 @@ export async function applyServerRows(
     ON CONFLICT (uuid) DO UPDATE SET ${setCols}
     WHERE excluded.updated_at >= ${local}.updated_at`;
 
+  // Transformações (ex.: baixar/gravar fotos) rodam ANTES da transação para
+  // não segurar o banco durante operações de rede/arquivo.
+  const prepared: any[] = [];
+  for (const r of rows) {
+    prepared.push(transform ? await transform(r) : r);
+  }
+
   await db.withTransactionAsync(async () => {
-    for (const r of rows) {
-      const row = transform ? await transform(r) : r;
+    for (const row of prepared) {
       const values = cols.map((c) => {
         const v = row[c];
         if (v === undefined || v === null) return c === "species_id" ? null : 0;
         return v;
       });
-      await db.runAsync(sql, values);
+      try {
+        await db.runAsync(sql, values);
+      } catch {
+        // Linha órfã (ex.: foto cuja árvore ainda não chegou). Não derruba o
+        // download inteiro; ela é reenviada numa próxima sincronização.
+        skipped++;
+      }
     }
   });
+  return skipped;
 }
 
 // ── Stats ──

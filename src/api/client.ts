@@ -17,11 +17,16 @@ export class ApiError extends Error {
 
 export async function apiFetch(
   path: string,
-  opts: { method?: string; body?: any; token?: string | null } = {}
+  opts: { method?: string; body?: any; token?: string | null; timeoutMs?: number } = {}
 ): Promise<any> {
-  const { method = "GET", body, token } = opts;
+  const { method = "GET", body, token, timeoutMs = 60000 } = opts;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  // Sem timeout o app ficava esperando para sempre no sinal fraco de campo.
+  const controller: AbortController | null =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller && timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   let res: Response;
   try {
@@ -29,12 +34,17 @@ export async function apiFetch(
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller?.signal,
     });
   } catch {
     throw new ApiError(
-      "Sem conexão com o servidor. Verifique sua internet e tente novamente.",
+      controller?.signal?.aborted
+        ? "O servidor demorou para responder. Tente novamente quando houver melhor sinal."
+        : "Sem conexão com o servidor. Verifique sua internet e tente novamente.",
       0
     );
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
   const data = await res.json().catch(() => ({}));

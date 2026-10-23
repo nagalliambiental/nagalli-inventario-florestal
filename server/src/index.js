@@ -17,7 +17,7 @@ app.get("/", (_req, res) =>
     health: "/health",
     endpoints: {
       auth: ["POST /auth/register", "POST /auth/login", "GET /auth/me", "GET /auth/bootstrap", "GET /auth/users", "PUT /auth/users/:uuid/password", "DELETE /auth/users/:uuid"],
-      sync: ["POST /sync/push", "GET /sync/pull?since=<ISO>"],
+      sync: ["POST /sync/push", "GET /sync/pull?since=<ISO>&meta=1", "GET /sync/photo/:uuid"],
     },
   })
 );

@@ -21,6 +21,7 @@ import {
   listSpecies,
   getSpecies,
   insertSpecies,
+  updateSpecies,
   deleteSpecies,
   addTreePhoto,
   deleteTreePhoto,
@@ -89,6 +90,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
   const [isTree, setIsTree] = useState(true);
   const [latitude, setLatitude] = useState(0);
   const [longitude, setLongitude] = useState(0);
+  const [gpsCapturing, setGpsCapturing] = useState(false);
 
   // Species picker
   const [showSpeciesModal, setShowSpeciesModal] = useState(false);
@@ -97,6 +99,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
   // Nova espécie manual
   const [showNewSpeciesModal, setShowNewSpeciesModal] = useState(false);
+  const [editingSpecies, setEditingSpecies] = useState<Species | null>(null);
   const [newSpecies, setNewSpecies] = useState({
     popularName: "",
     scientificName: "",
@@ -195,6 +198,8 @@ export function TreeFormScreen({ route, navigation }: Props) {
           }
           setPhytosanitary(t.phytosanitary || "");
           setNotes(t.notes || "");
+          setLatitude(t.latitude || 0);
+          setLongitude(t.longitude || 0);
           setPhotoUri(t.photoUri || "");
           setIsTree(t.isTree !== false);
           const saved: { id?: string; uri: string }[] = (t.photos || []).map((p) => ({ id: p.id, uri: p.uri }));
@@ -207,18 +212,34 @@ export function TreeFormScreen({ route, navigation }: Props) {
     }
   }, [treeId]);
 
-  useEffect(() => {
-    (async () => {
+  // A captura é explícita para evitar gravar a posição do formulário em vez
+  // da árvore. Ao editar, a coordenada salva permanece intacta.
+  const captureLocation = useCallback(async () => {
+    if (gpsCapturing) return;
+    setGpsCapturing(true);
+    try {
       const granted = await requestLocationPermission();
-      if (granted) {
-        const coords = await getCurrentCoords();
-        if (coords) {
-          setLatitude(coords.latitude);
-          setLongitude(coords.longitude);
-        }
+      if (!granted) {
+        Alert.alert(
+          "Permissão necessária",
+          "Permita o acesso à localização para capturar o GPS."
+        );
+        return;
       }
-    })();
-  }, []);
+      const coords = await getCurrentCoords();
+      if (!coords) {
+        Alert.alert(
+          "GPS indisponível",
+          "Não foi possível obter uma coordenada. Vá para um local aberto e tente novamente."
+        );
+        return;
+      }
+      setLatitude(coords.latitude);
+      setLongitude(coords.longitude);
+    } finally {
+      setGpsCapturing(false);
+    }
+  }, [gpsCapturing]);
 
   useFocusEffect(
     useCallback(() => {
@@ -238,11 +259,48 @@ export function TreeFormScreen({ route, navigation }: Props) {
     setShowSpeciesModal(false);
   };
 
+  const resetNewSpecies = () =>
+    setNewSpecies({
+      popularName: "", scientificName: "", family: "", woodDensity: "",
+      habit: "", distribution: "", endemism: "", conservationStatus: "",
+      growth: "", lifeSpan: "", dbhAmplitude: "", heightAmplitude: "",
+      epiphytes: "", herbaceousLianas: "", woodyLianas: "", grasses: "", canopyRegeneration: "",
+    });
+
+  const openNewSpecies = () => {
+    setEditingSpecies(null);
+    resetNewSpecies();
+    setShowNewSpeciesModal(true);
+  };
+
+  const openEditSpecies = (s: Species) => {
+    setEditingSpecies(s);
+    setNewSpecies({
+      popularName: s.popularName,
+      scientificName: s.scientificName,
+      family: s.family,
+      woodDensity: s.woodDensity ? String(s.woodDensity) : "",
+      habit: s.habit,
+      distribution: s.distribution,
+      endemism: s.endemism,
+      conservationStatus: s.conservationStatus,
+      growth: s.growth,
+      lifeSpan: s.lifeSpan,
+      dbhAmplitude: s.dbhAmplitude,
+      heightAmplitude: s.heightAmplitude,
+      epiphytes: s.epiphytes,
+      herbaceousLianas: s.herbaceousLianas,
+      woodyLianas: s.woodyLianas,
+      grasses: s.grasses,
+      canopyRegeneration: s.canopyRegeneration,
+    });
+    setShowNewSpeciesModal(true);
+  };
+
   const handleAddSpecies = async () => {
     const scientificName = newSpecies.scientificName.trim();
     const woodDensity = parseFloat(newSpecies.woodDensity.replace(",", "."));
-    const created: Species = {
-      id: 0,
+    const payload: Omit<Species, "id"> = {
       popularName: newSpecies.popularName.trim(),
       scientificName,
       family: newSpecies.family.trim(),
@@ -262,23 +320,34 @@ export function TreeFormScreen({ route, navigation }: Props) {
       grasses: newSpecies.grasses,
       canopyRegeneration: newSpecies.canopyRegeneration,
     };
-    created.id = await insertSpecies(created);
-    setSpeciesList((prev) =>
-      [...prev, created].sort((a, b) =>
-        speciesDisplayName(a).localeCompare(speciesDisplayName(b))
-      )
-    );
-    setSpeciesName(speciesDisplayName(created));
-    setSpeciesId(created.id);
-    setIsTree(habitIsTree(created.habit));
-    setNewSpecies({
-      popularName: "", scientificName: "", family: "", woodDensity: "",
-      habit: "", distribution: "", endemism: "", conservationStatus: "",
-      growth: "", lifeSpan: "", dbhAmplitude: "", heightAmplitude: "",
-      epiphytes: "", herbaceousLianas: "", woodyLianas: "", grasses: "", canopyRegeneration: "",
-    });
+    if (editingSpecies) {
+      await updateSpecies(editingSpecies.id, payload);
+      const updated: Species = { ...editingSpecies, ...payload };
+      setSpeciesList((prev) =>
+        prev
+          .map((x) => (x.id === updated.id ? updated : x))
+          .sort((a, b) => speciesDisplayName(a).localeCompare(speciesDisplayName(b)))
+      );
+      if (speciesId === updated.id) {
+        setSpeciesId(updated.id);
+        setSpeciesName(phytosanitary === "Morta" ? "Morta" : speciesDisplayName(updated));
+      }
+      setEditingSpecies(null);
+    } else {
+      const created: Species = { id: 0, ...payload };
+      created.id = await insertSpecies(created);
+      setSpeciesList((prev) =>
+        [...prev, created].sort((a, b) =>
+          speciesDisplayName(a).localeCompare(speciesDisplayName(b))
+        )
+      );
+      setSpeciesName(speciesDisplayName(created));
+      setSpeciesId(created.id);
+      setIsTree(habitIsTree(created.habit));
+      setShowSpeciesModal(false);
+    }
+    resetNewSpecies();
     setShowNewSpeciesModal(false);
-    setShowSpeciesModal(false);
   };
 
   const handleDeleteSpecies = (s: Species) => {
@@ -311,6 +380,11 @@ export function TreeFormScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleSpeciesTextChange = (value: string) => {
+    setSpeciesName(value);
+    if (!value.trim()) setSpeciesId(null);
+  };
+
   const updateStemField = (index: number, field: keyof StemInput, value: string) => {
     setStemsData((prev) => {
       const copy = [...prev];
@@ -331,10 +405,11 @@ export function TreeFormScreen({ route, navigation }: Props) {
   };
 
   const findOrCreateSpecies = async (name: string) => {
-    const norm = name.trim().toLowerCase();
+    const norm = normStr(name);
     const found =
-      [...speciesList].find((s) => speciesDisplayName(s).toLowerCase() === norm) ||
-      (await listSpecies()).find((s) => speciesDisplayName(s).toLowerCase() === norm);
+      [...speciesList, ...(await listSpecies())].find(
+        (s) => normStr(s.scientificName) === norm || normStr(s.popularName) === norm
+      ) || null;
     if (found) return found.id;
     return insertSpecies({
       popularName: newSpecies.popularName.trim(),
@@ -389,6 +464,27 @@ export function TreeFormScreen({ route, navigation }: Props) {
 
     const firstPhoto = photos[0]?.uri || photoUri;
 
+    const dead = phytosanitary === "Morta";
+    let effSpeciesId = speciesId;
+    let effSpeciesName = speciesName;
+    if (dead) {
+      effSpeciesId = null;
+      effSpeciesName = "Morta";
+    } else if (isTree) {
+      const typed = speciesName.trim();
+      const selecionada =
+        effSpeciesId != null
+          ? [...speciesList, ...(await listSpecies())].find((s) => s.id === effSpeciesId)
+          : null;
+      const matchName = selecionada
+        ? normStr(speciesDisplayName(selecionada))
+        : "";
+      if (typed && matchName !== normStr(typed)) {
+        effSpeciesId = await findOrCreateSpecies(typed);
+        effSpeciesName = typed;
+      }
+    }
+
     if (!isTree) {
       const scientificName = newSpecies.scientificName.trim();
       const fallbackName = scientificName || newSpecies.popularName.trim();
@@ -423,12 +519,11 @@ export function TreeFormScreen({ route, navigation }: Props) {
         await syncPhotos(id);
       }
     } else if (stems === 1) {
-      const dead = phytosanitary === "Morta";
       const data = {
         plotId,
         number: parseInt(number) || 1,
-        speciesId: dead ? null : speciesId,
-        speciesName: dead ? "Morta" : speciesName,
+        speciesId: effSpeciesId,
+        speciesName: effSpeciesName,
         isTree,
         capCm: cap,
         heightComercialM: parseDecimal(heightComercialM),
@@ -467,13 +562,12 @@ export function TreeFormScreen({ route, navigation }: Props) {
       const totalBa = parsedStems.reduce((sum, s) => sum + s.basalAreaM2, 0);
       const maxHeightTotal = Math.max(...parsedStems.map((s) => s.heightTotalM));
       const maxHeightComercial = Math.max(...parsedStems.map((s) => s.heightComercialM));
-      const dead = phytosanitary === "Morta";
 
       const data = {
         plotId,
         number: parseInt(number) || 1,
-        speciesId: dead ? null : speciesId,
-        speciesName: dead ? "Morta" : speciesName,
+        speciesId: effSpeciesId,
+        speciesName: effSpeciesName,
         isTree,
         capCm: 0, // não se aplica em árvore multifuste — CAP fica por fuste
         heightComercialM: maxHeightComercial,
@@ -582,15 +676,6 @@ export function TreeFormScreen({ route, navigation }: Props) {
             <Text style={styles.computed}>DAP: {dbh.toFixed(1)} cm • Área basal: {ba.toFixed(4)} m²</Text>
           )}
 
-          <Text style={styles.label}>Altura comercial (m)</Text>
-          <TextInput
-            style={styles.input}
-            value={heightComercialM}
-            onChangeText={setHeightComercialM}
-            keyboardType="decimal-pad"
-            placeholder="Ex: 8,0"
-          />
-
           <Text style={styles.label}>Altura total (m)</Text>
           <TextInput
             style={styles.input}
@@ -598,6 +683,15 @@ export function TreeFormScreen({ route, navigation }: Props) {
             onChangeText={setHeightTotalM}
             keyboardType="decimal-pad"
             placeholder="Ex: 15,5"
+          />
+
+          <Text style={styles.label}>Altura comercial (m)</Text>
+          <TextInput
+            style={styles.input}
+            value={heightComercialM}
+            onChangeText={setHeightComercialM}
+            keyboardType="decimal-pad"
+            placeholder="Ex: 8,0"
           />
         </>
       ) : (
@@ -621,19 +715,19 @@ export function TreeFormScreen({ route, navigation }: Props) {
                 <Text style={styles.computed}>DAP: {stemDbh.toFixed(1)} cm • Área basal: {stemBa.toFixed(4)} m²</Text>
               )}
 
-              <Text style={styles.label}>Altura comercial (m)</Text>
-              <TextInput
-                style={styles.input}
-                value={stem.heightComercialM}
-                onChangeText={(v) => updateStemField(i, "heightComercialM", v)}
-                keyboardType="decimal-pad"
-              />
-
               <Text style={styles.label}>Altura total (m)</Text>
               <TextInput
                 style={styles.input}
                 value={stem.heightTotalM}
                 onChangeText={(v) => updateStemField(i, "heightTotalM", v)}
+                keyboardType="decimal-pad"
+              />
+
+              <Text style={styles.label}>Altura comercial (m)</Text>
+              <TextInput
+                style={styles.input}
+                value={stem.heightComercialM}
+                onChangeText={(v) => updateStemField(i, "heightComercialM", v)}
                 keyboardType="decimal-pad"
               />
             </View>
@@ -692,11 +786,35 @@ export function TreeFormScreen({ route, navigation }: Props) {
       {isTree && (
         <>
           <Text style={styles.label}>Espécie</Text>
-          <TouchableOpacity style={styles.speciesBtn} onPress={() => setShowSpeciesModal(true)}>
-            <Text style={speciesName ? styles.speciesText : styles.placeholder}>
-              {speciesName || "Selecionar espécie..."}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.speciesRow}>
+            <TextInput
+              style={[styles.input, styles.speciesInput]}
+              value={speciesName}
+              onChangeText={handleSpeciesTextChange}
+              placeholder="Digite ou selecione a espécie..."
+              autoCapitalize="words"
+            />
+            <TouchableOpacity
+              style={styles.speciesListBtn}
+              onPress={() => setShowSpeciesModal(true)}
+            >
+              <Text style={styles.speciesListText}>Lista</Text>
+            </TouchableOpacity>
+            {speciesName !== "" && (
+              <TouchableOpacity
+                style={styles.speciesClearBtn}
+                onPress={() => {
+                  setSpeciesName("");
+                  setSpeciesId(null);
+                }}
+              >
+                <Text style={styles.speciesClearText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {speciesId != null && speciesName.trim() !== "" && (
+            <Text style={styles.computed}>Espécie vinculada ao catálogo.</Text>
+          )}
 
           <Text style={styles.label}>Condição fitossanitária</Text>
           <View style={styles.phytoRow}>
@@ -751,11 +869,22 @@ export function TreeFormScreen({ route, navigation }: Props) {
         </Text>
       )}
 
-      {latitude !== 0 && (
+      <View style={styles.gpsRow}>
         <Text style={styles.coords}>
-          📍 {latitude.toFixed(6)}, {longitude.toFixed(6)}
+          {latitude !== 0
+            ? `📍 ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+            : "📍 Sem coordenada"}
         </Text>
-      )}
+        <TouchableOpacity
+          onPress={captureLocation}
+          disabled={gpsCapturing}
+          style={[styles.gpsBtn, gpsCapturing && styles.gpsBtnDisabled]}
+        >
+          <Text style={styles.gpsBtnText}>
+            {gpsCapturing ? "Obtendo GPS..." : "Capturar GPS"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
         <Text style={styles.saveText}>Salvar</Text>
@@ -766,7 +895,7 @@ export function TreeFormScreen({ route, navigation }: Props) {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Selecionar espécie</Text>
             <View style={styles.modalHeaderActions}>
-              <TouchableOpacity onPress={() => setShowNewSpeciesModal(true)}>
+              <TouchableOpacity onPress={openNewSpecies}>
                 <Text style={styles.addBtn}>＋ Nova</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setShowSpeciesModal(false)}>
@@ -788,21 +917,29 @@ export function TreeFormScreen({ route, navigation }: Props) {
             data={displaySpecies}
             keyExtractor={(i) => String(i.id)}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.speciesItem}
-                onPress={() => handleSelectSpecies(item)}
-                onLongPress={() => handleDeleteSpecies(item)}
-                delayLongPress={400}
-              >
-                <Text style={styles.speciesItemName}>{speciesDisplayName(item)}</Text>
-                <Text style={styles.speciesItemPop}>
-                  {item.popularName} • {item.family}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.speciesItem}>
+                <TouchableOpacity
+                  style={styles.speciesItemMain}
+                  onPress={() => handleSelectSpecies(item)}
+                  onLongPress={() => handleDeleteSpecies(item)}
+                  delayLongPress={400}
+                >
+                  <Text style={styles.speciesItemName}>{speciesDisplayName(item)}</Text>
+                  <Text style={styles.speciesItemPop}>
+                    {item.popularName} • {item.family}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.speciesEditBtn}
+                  onPress={() => openEditSpecies(item)}
+                >
+                  <Text style={styles.speciesEditText}>✏️</Text>
+                </TouchableOpacity>
+              </View>
             )}
             ListEmptyComponent={<Text style={styles.emptySpecies}>Nenhuma espécie encontrada</Text>}
             ListFooterComponent={
-              <Text style={styles.speciesHint}>Segure uma espécie para excluí-la</Text>
+              <Text style={styles.speciesHint}>Toque para selecionar • segure para excluir • ✏️ edita</Text>
             }
           />
         </View>
@@ -811,7 +948,9 @@ export function TreeFormScreen({ route, navigation }: Props) {
       <Modal visible={showNewSpeciesModal} animationType="slide">
         <View style={styles.modal}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Nova espécie</Text>
+            <Text style={styles.modalTitle}>
+              {editingSpecies ? "Editar espécie" : "Nova espécie"}
+            </Text>
             <TouchableOpacity onPress={() => setShowNewSpeciesModal(false)}>
               <Text style={styles.closeBtn}>Fechar</Text>
             </TouchableOpacity>
@@ -936,7 +1075,9 @@ export function TreeFormScreen({ route, navigation }: Props) {
             />
 
             <TouchableOpacity style={styles.saveBtn} onPress={handleAddSpecies}>
-              <Text style={styles.saveText}>Salvar espécie</Text>
+              <Text style={styles.saveText}>
+                {editingSpecies ? "Salvar alterações" : "Salvar espécie"}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -959,7 +1100,24 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   computed: { fontSize: 13, color: colors.primary, marginTop: 4, fontWeight: "500" },
-  coords: { fontSize: 13, color: colors.textSecondary, marginTop: 8, textAlign: "center" },
+  coords: { fontSize: 13, color: colors.textSecondary, textAlign: "center" },
+  gpsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  gpsBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  gpsBtnDisabled: { opacity: 0.5 },
+  gpsBtnText: { color: colors.primary, fontWeight: "600", fontSize: 13 },
   photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
   photoItem: { position: "relative" },
   photoThumb: { width: 96, height: 96, borderRadius: 8 },
@@ -1026,6 +1184,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  speciesRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  speciesInput: { flex: 1, marginBottom: 0 },
+  speciesListBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  speciesListText: { color: colors.white, fontWeight: "700", fontSize: 14 },
+  speciesClearBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  speciesClearText: { fontSize: 16, color: colors.textSecondary, fontWeight: "700" },
   speciesText: { fontSize: 16, color: colors.text, fontStyle: "italic" },
   placeholder: { fontSize: 16, color: colors.textLight },
   phytoRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
@@ -1083,11 +1262,20 @@ const styles = StyleSheet.create({
   filterTextActive: { color: colors.white, fontWeight: "600" },
   searchInput: { marginHorizontal: 16, marginTop: 12, marginBottom: 8 },
   speciesItem: {
-    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor: colors.surface,
   },
+  speciesItemMain: { flex: 1, padding: 14 },
+  speciesEditBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  speciesEditText: { fontSize: 18 },
   speciesItemName: { fontSize: 16, color: colors.text, fontStyle: "italic" },
   speciesItemPop: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
   speciesHint: { textAlign: "center", color: colors.textLight, fontSize: 12, padding: 16 },

@@ -3,10 +3,10 @@ import type { Species } from "../types";
 type BaseSpecies = Omit<
   Species,
   | "id"
+  | "conservationStatus"
   | "habit"
   | "distribution"
   | "endemism"
-  | "conservationStatus"
   | "growth"
   | "lifeSpan"
   | "dbhAmplitude"
@@ -16,47 +16,47 @@ type BaseSpecies = Omit<
   | "woodyLianas"
   | "grasses"
   | "canopyRegeneration"
->;
+> & { conservationStatus?: string };
 
 const rawSpecies: BaseSpecies[] = [
   // ── Amazônia ──
   { popularName: "Ipê-roxo", scientificName: "Handroanthus impetiginosus", family: "Bignoniaceae", phytophysiognomy: "Amazônia", woodDensity: 0.85 },
-  { popularName: "Mogno", scientificName: "Swietenia macrophylla", family: "Meliaceae", phytophysiognomy: "Amazônia", woodDensity: 0.62 },
+  { popularName: "Mogno", scientificName: "Swietenia macrophylla", family: "Meliaceae", phytophysiognomy: "Amazônia", woodDensity: 0.62, conservationStatus: "VU (MMA 148/2022)" },
   { popularName: "Cedro-rosa", scientificName: "Cedrela fissilis", family: "Meliaceae", phytophysiognomy: "Amazônia", woodDensity: 0.58 },
-  { popularName: "Castanheira", scientificName: "Bertholletia excelsa", family: "Lecythidaceae", phytophysiognomy: "Amazônia", woodDensity: 0.67 },
+  { popularName: "Castanheira", scientificName: "Bertholletia excelsa", family: "Lecythidaceae", phytophysiognomy: "Amazônia", woodDensity: 0.67, conservationStatus: "VU (MMA 148/2022)" },
   { popularName: "Samaúma", scientificName: "Ceiba pentandra", family: "Malvaceae", phytophysiognomy: "Amazônia", woodDensity: 0.35 },
   { popularName: "Cumaru", scientificName: "Dipteryx odorata", family: "Fabaceae", phytophysiognomy: "Amazônia", woodDensity: 0.93 },
-  { popularName: "Jatobá", scientificName: "Hymenaea courbaril", family: "Fabaceae", phytophysiognomy: "Amazônia", woodDensity: 0.86 },
+  { popularName: "Jatobá", scientificName: "Hymenaea courbaril", family: "Fabaceae", phytophysiognomy: "Amazônia", woodDensity: 0.86, conservationStatus: "EN (SEMA 1995, PR)" },
   { popularName: "Andiroba", scientificName: "Carapa guianensis", family: "Meliaceae", phytophysiognomy: "Amazônia", woodDensity: 0.68 },
   { popularName: "Açacu", scientificName: "Hura crepitans", family: "Euphorbiaceae", phytophysiognomy: "Amazônia", woodDensity: 0.41 },
   { popularName: "Tauari", scientificName: "Couratari oblongifolia", family: "Lecythidaceae", phytophysiognomy: "Amazônia", woodDensity: 0.58 },
   { popularName: "Angelim-vermelho", scientificName: "Dinizia excelsa", family: "Fabaceae", phytophysiognomy: "Amazônia", woodDensity: 0.72 },
   { popularName: "Paricá", scientificName: "Schizolobium parahyba", family: "Fabaceae", phytophysiognomy: "Amazônia", woodDensity: 0.39 },
   { popularName: "Bacuri", scientificName: "Platonia insignis", family: "Clusiaceae", phytophysiognomy: "Amazônia", woodDensity: 0.75 },
-  { popularName: "Pau-amarelo", scientificName: "Euxylophora paraensis", family: "Rutaceae", phytophysiognomy: "Amazônia", woodDensity: 0.78 },
+  { popularName: "Pau-amarelo", scientificName: "Euxylophora paraensis", family: "Rutaceae", phytophysiognomy: "Amazônia", woodDensity: 0.78, conservationStatus: "EN (MMA 148/2022)" },
   { popularName: "Breu-vermelho", scientificName: "Protium heptaphyllum", family: "Burseraceae", phytophysiognomy: "Amazônia", woodDensity: 0.55 },
 
   // ── Mata Atlântica ──
   { popularName: "Ipê-amarelo", scientificName: "Handroanthus albus", family: "Bignoniaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.82 },
-  { popularName: "Pau-brasil", scientificName: "Paubrasilia echinata", family: "Fabaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.92 },
-  { popularName: "Jequitibá-rosa", scientificName: "Cariniana legalis", family: "Lecythidaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.58 },
-  { popularName: "Peroba-rosa", scientificName: "Aspidosperma polyneuron", family: "Apocynaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.75 },
-  { popularName: "Jacarandá-da-bahia", scientificName: "Dalbergia nigra", family: "Fabaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.87 },
-  { popularName: "Araucária", scientificName: "Araucaria angustifolia", family: "Araucariaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.52 },
+  { popularName: "Pau-brasil", scientificName: "Paubrasilia echinata", family: "Fabaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.92, conservationStatus: "EN (MMA 148/2022)" },
+  { popularName: "Jequitibá-rosa", scientificName: "Cariniana legalis", family: "Lecythidaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.58, conservationStatus: "EN (MMA 148/2022)" },
+  { popularName: "Peroba-rosa", scientificName: "Aspidosperma polyneuron", family: "Apocynaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.75, conservationStatus: "RR (SEMA 1995, PR)" },
+  { popularName: "Jacarandá-da-bahia", scientificName: "Dalbergia nigra", family: "Fabaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.87, conservationStatus: "VU (MMA 148/2022)" },
+  { popularName: "Araucária", scientificName: "Araucaria angustifolia", family: "Araucariaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.52, conservationStatus: "EN (MMA 148/2022); RR (SEMA 1995, PR)" },
   { popularName: "Pau-d'alho", scientificName: "Gallesia integrifolia", family: "Phytolaccaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.55 },
-  { popularName: "Palmito-juçara", scientificName: "Euterpe edulis", family: "Arecaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.35 },
+  { popularName: "Palmito-juçara", scientificName: "Euterpe edulis", family: "Arecaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.35, conservationStatus: "VU (MMA 148/2022)" },
   { popularName: "Guapuruvu", scientificName: "Schizolobium parahyba", family: "Fabaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.39 },
   { popularName: "Embaúba", scientificName: "Cecropia pachystachya", family: "Urticaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.38 },
   { popularName: "Ingá-feijão", scientificName: "Inga marginata", family: "Fabaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.62 },
   { popularName: "Canjerana", scientificName: "Cabralea canjerana", family: "Meliaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.65 },
   { popularName: "Cedro", scientificName: "Cedrela fissilis", family: "Meliaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.58 },
-  { popularName: "Bicuíba", scientificName: "Virola bicuhyba", family: "Myristicaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.49 },
-  { popularName: "Pindaíba", scientificName: "Xylopia brasiliensis", family: "Annonaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.60 },
+  { popularName: "Bicuíba", scientificName: "Virola bicuhyba", family: "Myristicaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.49, conservationStatus: "EN (MMA 148/2022)" },
+  { popularName: "Pindaíba", scientificName: "Xylopia brasiliensis", family: "Annonaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.60, conservationStatus: "VU (MMA 148/2022)" },
   { popularName: "Goiaba", scientificName: "Psidium guajava", family: "Myrtaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.67 },
   { popularName: "Capixingui", scientificName: "Croton floribundus", family: "Euphorbiaceae", phytophysiognomy: "Mata Atlântica", woodDensity: 0.47 },
 
   // ── Cerrado ──
-  { popularName: "Pequi", scientificName: "Caryocar brasiliense", family: "Caryocaraceae", phytophysiognomy: "Cerrado", woodDensity: 0.78 },
+  { popularName: "Pequi", scientificName: "Caryocar brasiliense", family: "Caryocaraceae", phytophysiognomy: "Cerrado", woodDensity: 0.78, conservationStatus: "VU (SEMA 1995, PR)" },
   { popularName: "Baru", scientificName: "Dipteryx alata", family: "Fabaceae", phytophysiognomy: "Cerrado", woodDensity: 0.88 },
   { popularName: "Angico", scientificName: "Anadenanthera peregrina", family: "Fabaceae", phytophysiognomy: "Cerrado", woodDensity: 0.73 },
   { popularName: "Cagaita", scientificName: "Eugenia dysenterica", family: "Myrtaceae", phytophysiognomy: "Cerrado", woodDensity: 0.72 },

@@ -100,18 +100,24 @@ router.post("/push", async (req, res) => {
     return res.status(500).json({ error: "Erro interno ao enviar dados." });
   }
 });
-// GET /sync/pull?since=<ISO>
+// GET /sync/pull?since=<ISO>&meta=1
 // Retorna tudo que mudou depois de `since` (incluindo tombstones de exclusão).
-// Sem `since`, retorna o snapshot completo.
+// Sem `since`, retorna o snapshot completo. Com `meta=1`, o conteúdo das fotos
+// (coluna `data`) é omitido; o app busca cada foto em /sync/photo/:uuid.
 router.get("/pull", async (req, res) => {
   try {
     const since = req.query.since;
+    const meta = req.query.meta === "1";
     const out = { since: since || null, now: Date.now() };
     for (const [key, cols] of Object.entries(TABLES)) {
+      const pullCols =
+        meta && key === "photos"
+          ? cols.filter((c) => c !== "data")
+          : cols;
       const table = TABLE_NAMES[key];
       const sql = since
-        ? `SELECT ${cols.join(", ")} FROM ${table} WHERE updated_at > $1::timestamptz`
-        : `SELECT ${cols.join(", ")} FROM ${table}`;
+        ? `SELECT ${pullCols.join(", ")} FROM ${table} WHERE updated_at > $1::timestamptz`
+        : `SELECT ${pullCols.join(", ")} FROM ${table}`;
       const { rows } = since ? await pool.query(sql, [since]) : await pool.query(sql);
       out[key] = rows.map((r) => {
         const o = { ...r };
@@ -123,6 +129,24 @@ router.get("/pull", async (req, res) => {
   } catch (e) {
     console.error("pull error", e);
     return res.status(500).json({ error: "Erro interno ao baixar dados." });
+  }
+});
+
+// GET /sync/photo/:uuid
+// Baixa o conteúdo (base64) de uma foto específica, sob demanda.
+router.get("/photo/:uuid", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT data FROM tree_photos WHERE uuid = $1",
+      [req.params.uuid]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Foto não encontrada." });
+    }
+    return res.json({ data: rows[0].data || "" });
+  } catch (e) {
+    console.error("photo error", e);
+    return res.status(500).json({ error: "Erro interno ao baixar a foto." });
   }
 });
 

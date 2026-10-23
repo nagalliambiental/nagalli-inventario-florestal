@@ -31,6 +31,7 @@ interface Props {
 }
 
 const WATCHDOG_MS = 4000;
+const MAX_OUTPUT_DIM = 2560;
 
 // Marca d'água renderizada INLINE no fluxo da tela (sem Modal e sem overlay
 // em outra janela): no Android, view dentro de Modal fica em outra janela
@@ -87,10 +88,13 @@ export function PhotoWatermark({
       try {
         await new Promise((r) => setTimeout(r, 200));
         if (cancelled) return;
+        const scale = Math.min(1, MAX_OUTPUT_DIM / Math.max(width, height));
         const result = await captureRef(ref, {
           format: "jpg",
-          quality: 0.9,
+          quality: 0.95,
           result: "tmpfile",
+          width: Math.round(width * scale),
+          height: Math.round(height * scale),
         });
         finish(result);
       } catch {

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ export function HomeScreen({ navigation }: Props) {
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [syncing, setSyncing] = useState(false);
+  const syncStartedAt = useRef<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,11 +60,20 @@ export function HomeScreen({ navigation }: Props) {
         );
 
   const handleSync = async () => {
-    if (!token || syncing) return;
+    // Se uma sincronização anterior travou (rede caiu no meio), não deixa o
+    // botão bloqueado para sempre: depois de 6 minutos libera de novo.
+    if (
+      syncing &&
+      syncStartedAt.current &&
+      Date.now() - syncStartedAt.current < 6 * 60 * 1000
+    ) {
+      return;
+    }
+    if (!token) return;
     setSyncing(true);
+    syncStartedAt.current = Date.now();
     try {
       const r = await syncNow(token);
-      await refreshProjects();
       Alert.alert(
         "Sincronizado",
         r.pushed === 0 && r.pulled === 0
@@ -76,6 +86,10 @@ export function HomeScreen({ navigation }: Props) {
         e?.message || "Sem conexão com o servidor. Tente novamente quando tiver sinal."
       );
     } finally {
+      syncStartedAt.current = null;
+      // Atualiza mesmo quando só o download falha: os dados locais podem já
+      // ter sido enviados com sucesso e o selo precisa refletir isso.
+      await refreshProjects().catch(() => {});
       setSyncing(false);
     }
   };
